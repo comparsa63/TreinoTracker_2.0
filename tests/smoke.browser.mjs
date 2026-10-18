@@ -22,6 +22,11 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PAGE = "/TreinoTracker_DeepSeek.html";
+
+// E6: a blindagem de toque duplo é uma janela de 400 ms por INTENÇÃO da UI. Uma
+// série real leva segundos, então os testes que simulam uma sequência de toques
+// legítima paceiam como um humano; a janela é o que se testa nos toques em rajada.
+const TAP_WAIT_MS = 450;
 const CHROME_CANDIDATES = [
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
   "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
@@ -639,13 +644,21 @@ async function main() {
     JSON.stringify(resumed));
 
   // --- conclui o treino e confere histórico/PRs/limpeza --------------------
-  const finished = await ev(`(function(){
+  const finished = await ev(`(async function(){
     var before = state.history.length;
     var prsBefore = PR.getAll().length;
     var id = state.session.id;
     var guard = 0;
-    while (state.session && state.session.status !== 'finished' && guard++ < 20) completeSet();
+    var esperarJanela = function(){ return new Promise(function(r){ setTimeout(r, ${TAP_WAIT_MS}); }); };
+    // E6: um toque duplo não pode registrar duas séries (a blindagem é uma janela
+    // por intenção). O laço paceia os toques como um humano faria — concluir
+    // séries leva segundos, não milissegundos.
+    while (state.session && state.session.status !== 'finished' && guard++ < 20) {
+      completeSet();
+      if (state.session && state.session.status !== 'finished') await esperarJanela();
+    }
     var isFinished = !!state.session && state.session.status === 'finished';
+    await esperarJanela();                    // deixa a janela do último toque passar
     completeSet();                            // toque de CONFIRMAÇÃO: grava e sai
     var top = state.history[0];
     return {
@@ -1002,6 +1015,113 @@ async function main() {
       finalE5.botao === finalE5.esperado && finalE5.cta === finalE5.esperadoCta &&
       finalE5.limpou === true,
     JSON.stringify(finalE5));
+
+  // --- E6: blindagem de toque duplo (janela por INTENÇÃO, no fluxo da UI) ----
+  // O relógio aqui é o REAL (a UI usa new Date()), então o teste ESPERA a janela
+  // passar quando quer simular o toque seguinte de uma sequência legítima.
+  const duploE6 = await ev(`(function(){
+    state.session = null;
+    state.editingRoutineId = state.routines[0].id;   // rotina A: 4 séries no 1º exercício
+    startWorkoutSession();
+    state.autoRestEnabled = false;                   // foco na blindagem, não no descanso
+    completeSet();                                   // toque 1: registra a série
+    completeSet();                                   // toque duplo: ignorado
+    completeSet();                                   // toque triplo: ignorado
+    return {
+      series: state.session.exercises[0].setsCompleted,
+      registradas: state.session.exercises[0].completedSets.length,
+      status: state.session.status
+    };
+  })()`);
+  check("E6: toque duplo/triplo em 'Concluir Série' registra UMA série",
+    duploE6.series === 1 && duploE6.registradas === 1 && duploE6.status === 'active',
+    JSON.stringify(duploE6));
+
+  await sleep(TAP_WAIT_MS);
+  const depoisE6 = await ev(`(function(){
+    completeSet();                                   // agora é outro toque, de verdade
+    return { series: state.session.exercises[0].setsCompleted };
+  })()`);
+  check("E6: passada a janela, o toque seguinte registra a série seguinte",
+    depoisE6.series === 2, JSON.stringify(depoisE6));
+
+  const alternadorE6 = await ev(`(function(){
+    const antes = state.session.status;
+    togglePauseWorkout();                            // pausa
+    togglePauseWorkout();                            // toque duplo: ignorado (não retoma)
+    return {
+      antes: antes, depois: state.session.status,
+      botao: document.getElementById('btn-pause-resume').innerText,
+      esperado: translations[state.lang].resume_workout
+    };
+  })()`);
+  check("E6: toque duplo no alternador pausa UMA vez (não retoma em seguida)",
+    alternadorE6.antes === 'active' && alternadorE6.depois === 'paused' &&
+      alternadorE6.botao === alternadorE6.esperado,
+    JSON.stringify(alternadorE6));
+
+  const recusaE6 = await ev(`(function(){
+    // Recusa do domínio NÃO é toque: a janela volta e o toque seguinte é atendido.
+    // Execução NOVA (o start zera as janelas), então a checagem não depende do
+    // pacing das anteriores; pausa/retoma por FORA da UI (o alternador tem janela
+    // própria e não é o alvo aqui).
+    discardAndExit();
+    state.session = null;
+    state.editingRoutineId = state.routines[0].id;
+    startWorkoutSession();
+    state.autoRestEnabled = false;
+    WorkoutController.pause(state.session, new Date());
+    const chave = tapKey('complete-set');
+    completeSet();                                        // guard aceita, domínio recusa
+    const janelaDevolvida = tapGuard.lastAt(chave) === null;
+    completeSet();                                        // a janela voltou: recusa de novo
+    WorkoutController.resume(state.session, new Date());
+    completeSet();                                        // toque imediato após a recusa
+    return {
+      janelaDevolvida: janelaDevolvida,
+      status: state.session.status,
+      series: state.session.exercises[0].setsCompleted
+    };
+  })()`);
+  check("E6: recusa não conta como toque (janela devolvida) e a UI não fica presa",
+    recusaE6.janelaDevolvida === true && recusaE6.status === 'active' && recusaE6.series === 1,
+    JSON.stringify(recusaE6));
+
+  const novaExecucaoE6 = await ev(`(function(){
+    discardAndExit();
+    state.session = null;
+    state.editingRoutineId = state.routines[0].id;
+    startWorkoutSession();
+    completeSet();                                   // 1ª série da execução NOVA
+    return { series: state.session.exercises[0].setsCompleted, status: state.session.status };
+  })()`);
+  check("E6: a janela não vaza para a execução seguinte",
+    novaExecucaoE6.series === 1 && novaExecucaoE6.status === 'active',
+    JSON.stringify(novaExecucaoE6));
+
+  // Caminhos NÃO blindados: já são idempotentes ou aditivos por DESIGN (auditoria).
+  const auditE6 = await ev(`(function(){
+    startRestTimer(60);
+    const antes = restSnapshot(new Date()).remainingMs;
+    adjustRestTime(15);
+    adjustRestTime(15);                              // dois toques = +30 s (de propósito)
+    const depois = restSnapshot(new Date()).remainingMs;
+    skipRest();
+    skipRest();                                      // repetir é no-op (já fechou)
+    const out = {
+      acrescimo: depois - antes,
+      overlay: document.getElementById('rest-overlay').classList.contains('active'),
+      ticker: state.restTimer.id !== null,
+      timer: state.restTimer.timer !== null
+    };
+    discardAndExit();                                // deixa o Player limpo para o fim do smoke
+    out.home = document.getElementById('screen-home').classList.contains('active');
+    return out;
+  })()`);
+  check("E6: 'Pular Descanso' é idempotente e ±15s é aditivo por design",
+    auditE6.acrescimo >= 29000 && auditE6.acrescimo <= 31000 && auditE6.overlay === false &&
+      auditE6.ticker === false && auditE6.timer === false && auditE6.home === true,
+    JSON.stringify(auditE6));
 
   // --- Erros de JS ----------------------------------------------------------
   const realErrors = jsErrors.filter((e) => !/unsplash|net::ERR|Failed to load resource|ERR_BLOCKED/i.test(e));

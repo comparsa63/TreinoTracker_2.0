@@ -752,6 +752,7 @@
 <script src="js/workout-session.js"></script>
 <script src="js/rest-timer.js"></script>
 <script src="js/wake-lock.js"></script>
+<script src="js/action-guard.js"></script>
 <script src="js/workout-controller.js"></script>
 
 <script>
@@ -1091,8 +1092,30 @@
         }
     }
 
+    // ================= LÓGICA: BLINDAGEM DE TOQUE DUPLO (Sprint 4 / E6) =================
+    // Dois toques em milissegundos na MESMA intenção são um toque acidental:
+    // "Concluir Série" registraria DUAS séries (a segunda com os mesmos valores)
+    // e o alternador do header pausaria E retomaria em sequência. A cerca é uma
+    // JANELA por INTENÇÃO (`ActionGuard`, puro e testável, em js/action-guard.js):
+    // a repetição dentro da janela é ignorada em SILÊNCIO (não é erro do usuário
+    // — o primeiro toque já valeu) e a janela NUNCA fica presa.
+    // Só as intenções com DANO REAL são blindadas; os outros caminhos já são
+    // idempotentes por contrato (fim do treino deduplica por `sessionId`,
+    // saída/descarte zeram a sessão e "Pular Descanso" só fecha o que está aberto).
+    const TAP_WINDOW_MS = 400;
+    const tapGuard = ActionGuard.create(TAP_WINDOW_MS);
+
+    /** Chave da blindagem: a INTENÇÃO da UI + a execução atual (não vaza entre treinos). */
+    function tapKey(intent) {
+        return intent + ':' + (state.session ? state.session.id : 'sem-sessao');
+    }
+
     function startWorkoutSession() {
         const routine = state.routines.find(x => x.id === state.editingRoutineId);
+
+        // E6: execução nova -> janelas novas. As chaves já são por sessão; o
+        // reset é cinto de segurança (e mantém o mapa da blindagem pequeno).
+        tapGuard.reset();
 
         // Já existe treino em andamento: NÃO sobrescreve (perderia o progresso).
         // Reoferece retomar/descartar, fechando o ciclo com o convite do boot.
@@ -1213,6 +1236,9 @@
 
         // Treino já concluído: este toque CONFIRMA o registro no histórico.
         if (s.status === 'finished' || s.isFinished) {
+            // E6: o botão trocou de INTENÇÃO (agora é confirmar) — a blindagem é
+            // própria, porque o toque duplo aqui repetiria a gravação.
+            if (!tapGuard.accept(tapKey('finish-confirm'), new Date())) return;
             // Sessão encerrada: não há mais motivo para manter a tela acesa
             // nem descanso em tela (fecha o ticker — sem vazamento).
             syncWakeLock(false, 'finished');
@@ -1223,6 +1249,10 @@
             navigate('home');
             return;
         }
+
+        // E6: dois toques em milissegundos registrariam DUAS séries (a segunda
+        // com os mesmos valores), avançando o índice sem ninguém ter treinado.
+        if (!tapGuard.accept(tapKey('complete-set'), new Date())) return;
 
         const before = { ex: s.currentExerciseIndex, set: s.currentSetIndex };
         const current = s.exercises[before.ex];
@@ -1237,6 +1267,9 @@
         }, new Date());
 
         if (!result.ok) {
+            // A recusa do domínio NÃO é um toque aceito: devolve a janela para
+            // que a correção do usuário seja atendida de imediato.
+            tapGuard.forget(tapKey('complete-set'));
             showToast(result.message || 'Não foi possível concluir a série.', 'error');
             return;
         }
@@ -1266,10 +1299,18 @@
     // UI é um único alternador; o estado real continua sendo `session.status`.
     function togglePauseWorkout() {
         if (!state.session) return false;
+        // E6: a blindagem mora AQUI — pausar e retomar são duas ações VÁLIDAS do
+        // domínio, então a cerca é a INTENÇÃO da UI ("alternar"), não a função
+        // chamada. Dois toques seguidos são um toque só.
+        const key = tapKey('pause-toggle');
+        if (!tapGuard.accept(key, new Date())) return false;
         // Pausada -> retoma. ATIVA ou FINALIZADA -> segue para o controlador,
         // que recusa com motivo ("o treino está pausado ou finalizado") — a UI
         // não inventa estado, só mostra a decisão do domínio.
-        return state.session.status === 'paused' ? resumeWorkout(new Date()) : pauseWorkout();
+        const ok = state.session.status === 'paused' ? resumeWorkout(new Date()) : pauseWorkout();
+        // Recusa do domínio (ex.: treino finalizado) não é um toque aceito.
+        if (!ok) tapGuard.forget(key);
+        return ok;
     }
 
     function pauseWorkout() {

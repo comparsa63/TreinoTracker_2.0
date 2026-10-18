@@ -1914,9 +1914,12 @@ function testWorkoutPlayerE5() {
     (html.match(/setInterval\(/g) || []).length === 1);
 
   // --- pausa/retomada do treino (UI) --------------------------------------
+  // E6: a blindagem engordou o alternador — a cerca passa a ser o CORPO da
+  // função (extraído UMA vez), não um limite de proximidade em caracteres.
+  const toggleBody = (html.match(/function togglePauseWorkout\(\)[\s\S]*?\n    \}/) || [""])[0];
   ok("pausa: botão único alterna pausa/retomada",
     html.includes('id="btn-pause-resume"') && html.includes('onclick="togglePauseWorkout()"') &&
-      /function togglePauseWorkout\(\)[\s\S]{0,600}?resumeWorkout\(new Date\(\)\) : pauseWorkout\(\)/.test(html));
+      toggleBody.includes("resumeWorkout(new Date()) : pauseWorkout()"));
   ok("pausa: rótulo e CTA vêm do ESTADO da sessão (sem cópia local)",
     html.includes("const paused = s.status === 'paused'") &&
       html.includes("'resume_workout' : 'pause_workout'") &&
@@ -1927,12 +1930,106 @@ function testWorkoutPlayerE5() {
     /function resumeWorkout\(now\)[\s\S]{0,700}?restSyncSession\(at\)/.test(html));
   ok("pausa: restSyncSession usa o ponto único do controlador",
     /function restSyncSession\(now\)[\s\S]{0,320}?WorkoutController\.restSync\(timer, state\.session/.test(html));
+  // E6 acrescentou a blindagem ao alternador: a cerca da E5 era de PROXIMIDADE
+  // (`[\s\S]{0,420}`) e passou a usar o CORPO da função (extraído acima) — o que
+  // importa é o alternador delegar para pausar/retomar, não o tamanho do trecho.
   ok("pausa: sessão finalizada não inventa estado (recusa vem do controlador)",
-    /function togglePauseWorkout\(\)[\s\S]{0,420}?pauseWorkout\(\)/.test(html) &&
+    toggleBody.includes("pauseWorkout()") && toggleBody.includes("resumeWorkout(new Date())") &&
       /function pauseWorkout\(\)[\s\S]{0,420}?showToast\(result\.message/.test(html) &&
       html.includes("const paused = s.status === 'paused'"));
 }
 
+
+// ---------------------------------------------------------------------------
+// ActionGuard — blindagem de toque duplo da UI (E6)
+// ---------------------------------------------------------------------------
+function testActionGuard() {
+  suite("ActionGuard (blindagem de toque duplo / E6)");
+
+  const sb = makeSandbox();
+  loadModules(sb, ["js/action-guard.js"]);
+  const A = sb.ActionGuard;
+
+  const src = fs.readFileSync(path.join(ROOT, "js", "action-guard.js"), "utf8");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+
+  ok("módulo puro: sem DOM, storage, persistência, eventos, timers ou domínio",
+    !/\bdocument\b|\blocalStorage\b|\bPersistence\b|\bEventBus\b|\bsetTimeout\b|\bsetInterval\b|\bWorkoutSession\b|\bWorkoutController\b|\bRestTimer\b|\bWakeLock\b/.test(code));
+  ok("não lê o relógio: o instante entra por parâmetro",
+    !/new Date\(\)/.test(code));
+  eq("janela padrão é 400 ms", A.WINDOW_MS, 400);
+  eq("instância sem parâmetro usa a janela padrão", A.create().windowMs, 400);
+
+  // ---- aceite x recusa por janela ------------------------------------------
+  const g = A.create();
+  ok("primeira chamada da chave é aceita", g.accept("complete-set:s_1", 1000) === true);
+  ok("repetição dentro da janela é recusada", g.accept("complete-set:s_1", 1300) === false);
+  ok("exatamente na borda da janela é aceita", g.accept("complete-set:s_1", 1400) === true);
+  ok("depois da janela é aceita", g.accept("complete-set:s_1", 5000) === true);
+
+  // ---- recusa NÃO estende a janela (nada de flag presa) --------------------
+  const g2 = A.create();
+  g2.accept("k", 0);
+  g2.accept("k", 100);
+  g2.accept("k", 200);
+  ok("recusas não estendem a janela (contada do último ACEITE)",
+    g2.accept("k", 400) === true && g2.lastAt("k") === 400);
+
+  // ---- chaves independentes -----------------------------------------------
+  const g3 = A.create();
+  ok("chaves diferentes não interferem (intenções separadas)",
+    g3.accept("complete-set:s_1", 0) === true && g3.accept("pause-toggle:s_1", 10) === true &&
+      g3.accept("complete-set:s_1", 20) === false && g3.accept("pause-toggle:s_1", 30) === false);
+  ok("a MESMA intenção em EXECUÇÕES diferentes não se bloqueia",
+    g3.accept("complete-set:s_2", 25) === true);
+
+  // ---- forget / lastAt / reset --------------------------------------------
+  const g4 = A.create();
+  ok("lastAt devolve null antes de qualquer aceite", g4.lastAt("k") === null);
+  g4.accept("k", 777);
+  eq("lastAt devolve o ms do último aceite", g4.lastAt("k"), 777);
+  ok("forget libera a janela na hora",
+    g4.forget("k") === true && g4.accept("k", 778) === true && g4.lastAt("k") === 778);
+  ok("forget de chave inexistente é no-op", g4.forget("nao-existe") === false);
+  g4.accept("outra", 1000);
+  eq("reset devolve quantas chaves esqueceu", g4.reset(), 2);
+  ok("reset limpa as janelas", g4.lastAt("k") === null && g4.accept("k", 1010) === true);
+
+  // ---- instâncias isoladas ------------------------------------------------
+  const a = A.create(50);
+  const b = A.create(50);
+  a.accept("k", 0);
+  ok("instâncias são isoladas (sem estado compartilhado)",
+    b.accept("k", 1) === true && a.accept("k", 1) === false);
+
+  // ---- janela customizada e fallback --------------------------------------
+  const g5 = A.create(100);
+  ok("janela customizada é respeitada",
+    g5.accept("k", 0) === true && g5.accept("k", 99) === false && g5.accept("k", 100) === true);
+  eq("janela inválida (0) cai no padrão", A.create(0).windowMs, 400);
+  eq("janela inválida (negativa) cai no padrão", A.create(-5).windowMs, 400);
+  eq("janela inválida (NaN) cai no padrão", A.create(NaN).windowMs, 400);
+  eq("janela inválida (string) cai no padrão", A.create("400").windowMs, 400);
+
+  // ---- fail-closed em chamada malformada ----------------------------------
+  const g6 = A.create();
+  ok("chave vazia ou não-string é recusada",
+    g6.accept("", 0) === false && g6.accept(null, 0) === false && g6.accept(42, 0) === false);
+  ok("instante inválido é recusado",
+    g6.accept("k", undefined) === false && g6.accept("k", NaN) === false &&
+      g6.accept("k", "1000") === false && g6.accept("k", new Date(NaN)) === false);
+  ok("chamada malformada NÃO suja o estado (aceite seguinte funciona)",
+    g6.accept("k", 5000) === true && g6.lastAt("k") === 5000);
+  ok("relógio para trás não libera a ação",
+    g6.accept("k", 3000) === false && g6.lastAt("k") === 5000);
+
+  // ---- Date e number são o MESMO instante ---------------------------------
+  const g7 = A.create();
+  const t = new Date("2026-10-18T10:00:00.000Z");
+  ok("aceita Date (de outro realm) e number como o mesmo instante",
+    g7.accept("k", t) === true && g7.accept("k", t.getTime() + 100) === false &&
+      g7.lastAt("k") === t.getTime() && g7.accept("k", t.getTime() + 400) === true);
+}
 
 // ---------------------------------------------------------------------------
 // Wiring estático do HTML
@@ -1942,7 +2039,7 @@ function testWiring() {
 
   const html = fs.readFileSync(path.join(ROOT, "TreinoTracker_DeepSeek.html"), "utf8");
 
-  const order = ["js/utils.js", "services/storage.js", "js/i18n.js", "js/data/exercises.js", "js/catalog.js", "js/events.js", "js/routine-actions.js", "js/pr.js", "js/workout-session.js", "js/rest-timer.js", "js/wake-lock.js", "js/workout-controller.js"].map((src) => ({
+  const order = ["js/utils.js", "services/storage.js", "js/i18n.js", "js/data/exercises.js", "js/catalog.js", "js/events.js", "js/routine-actions.js", "js/pr.js", "js/workout-session.js", "js/rest-timer.js", "js/wake-lock.js", "js/action-guard.js", "js/workout-controller.js"].map((src) => ({
     src,
     at: html.indexOf('src="' + src + '"'),
   }));
@@ -2018,6 +2115,36 @@ function testWiring() {
     html.includes("WakeLock.attach(document)") && html.includes("WakeLock.detach()") &&
       html.includes("'pagehide'"));
 
+  // Sprint 4 / E6 — a blindagem de toque duplo é uma JANELA por INTENÇÃO da UI
+  // (js/action-guard.js, puro); só as intenções com dano real são blindadas.
+  const guardSrc = fs.readFileSync(path.join(ROOT, "js", "action-guard.js"), "utf8");
+  const guardCode = guardSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  ok("blindagem: módulo de janela carregado antes do script principal",
+    html.includes('src="js/action-guard.js"') &&
+      html.indexOf('src="js/action-guard.js"') < html.indexOf("<script>\n    // ================= CATÁLOGO REAL"));
+  ok("blindagem: módulo puro (sem DOM, storage, domínio, timers ou relógio)",
+    !/\bdocument\b|\blocalStorage\b|\bPersistence\b|\bEventBus\b|\bWorkoutSession\b|\bWorkoutController\b|\bRestTimer\b|\bWakeLock\b|\bsetTimeout\b|\bsetInterval\b/.test(guardCode) &&
+      !/new Date\(\)/.test(guardCode));
+  ok("blindagem: uma instância no Player, com a janela declarada",
+    html.includes("const TAP_WINDOW_MS = 400;") && html.includes("ActionGuard.create(TAP_WINDOW_MS)"));
+  ok("blindagem: chave = INTENÇÃO da UI + execução (não vaza entre treinos)",
+    /function tapKey\(intent\)/.test(html) &&
+      html.includes("intent + ':' + (state.session ? state.session.id : 'sem-sessao')"));
+  ok("blindagem: cobre as intenções com dano real (série, confirmar, alternar)",
+    html.includes("tapKey('complete-set')") && html.includes("tapKey('finish-confirm')") &&
+      html.includes("tapKey('pause-toggle')") &&
+      html.includes("tapGuard.accept(tapKey('complete-set'), new Date())") &&
+      html.includes("tapGuard.accept(tapKey('finish-confirm'), new Date())") &&
+      html.includes("tapGuard.accept(key, new Date())"));
+  ok("blindagem: recusa do domínio não conta como toque (forget)",
+    html.includes("tapGuard.forget(tapKey('complete-set'))") && html.includes("tapGuard.forget(key)"));
+  ok("blindagem: execução nova zera as janelas (reset no início do treino)",
+    /function startWorkoutSession\(\)[\s\S]{0,260}?tapGuard\.reset\(\)/.test(html));
+  ok("blindagem: alternador é UMA intenção para duas ações do domínio",
+    html.includes("? resumeWorkout(new Date()) : pauseWorkout();"));
+  ok("blindagem: sem toast para toque duplo (o primeiro toque já valeu)",
+    !/showToast\([^)]*duplicat/i.test(html) && !/showToast\([^)]*duplo/i.test(html));
+
   const homeBlock = html.match(/<section id="screen-home"[\s\S]*?<\/section>/)[0];
   ok("nenhum <script>/<link> foi enfiado DENTRO do bloco da Home",
     !/<script|<link/i.test(homeBlock));
@@ -2046,6 +2173,7 @@ function testWiring() {
   testWorkoutController();
   testWorkoutControllerRest();
   testWorkoutPlayerE5();
+  testActionGuard();
   testWiring();
 
   console.log("\n==========================================");
