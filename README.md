@@ -32,8 +32,8 @@ npm run test:update # ⚠️ REGRAVA o golden master da Home (só com autorizaç
 | Suíte | O que garante | Nº |
 |---|---|---|
 | `tests/home-guard.test.js` | A Home não mudou 1 byte (markup, CSS, textos pt/en/es) | 1 |
-| `tests/modules.test.js` | Utils, Storage, EventBus, i18n, Persistence, Catalog, PR e RoutineActions + wiring do HTML | 215 |
-| `tests/smoke.browser.mjs` | Chrome real: Home, PT/EN, rotina+histórico+PRs persistem, navegação de TODOS os grupos musculares (320→1024px) e exclusão segura de treino | 48 |
+| `tests/modules.test.js` | Utils, Storage, EventBus, i18n, Persistence, Catalog (grupos + subgrupos), PR e RoutineActions + wiring do HTML | 229 |
+| `tests/smoke.browser.mjs` | Chrome real: Home, PT/EN, rotina+histórico+PRs persistem, navegação de TODOS os grupos/subgrupos musculares (320→1024px) e exclusão segura de treino | 57 |
 
 ## Estrutura
 
@@ -46,9 +46,9 @@ js/
   persistence.js              # Persistence — hidratação/gravação do estado
   pr.js                       # PR — engine de recordes pessoais (Fase 2C)
   routine-actions.js          # RoutineActions — exclusão segura de rotina (Fase 2C)
-  catalog.js                  # Catalog — catálogo real + API (Fase 2B)
+  catalog.js                  # Catalog — catálogo real + taxonomia/API (Fases 2B + taxonomia)
   data/
-    exercises.js              # ExerciseCatalog — 81 exercícios (porte do TreinoTracker)
+    exercises.js              # ExerciseCatalog — 81 exercícios (grupoMuscular + subgrupo)
 assets/
   images/                     # ícones de anatomia muscular (13 jpg, sem hotlink)
 services/
@@ -138,6 +138,17 @@ identificador direto (`typeof state !== 'undefined'`), nunca via `window.state`.
   `getInstructions`, `getMistakes`, `getTips`). **Mídia**: os GIFs do projeto
   original apontavam para `assets/gifs/` (inexistente) e foram substituídos pelos
   13 ícones de anatomia locais (`assets/images/`) — sem hotlink do Unsplash.
+- **Taxonomia muscular (`grupoMuscular` + `subgrupo`)**: cada exercício tem o
+  **grupo principal** em `grupoMuscular` (compatível com tudo que já existia) e,
+  quando a classificação é inequívoca, um **grupo específico** opcional em
+  `subgrupo` — `Quadríceps`, `Posterior de Coxa`, `Panturrilha`, `Lombar` e
+  `Glúteo` (13 exercícios). O `Catalog` expõe `subgroups()`, `filterGroups()`
+  (principais + específicos, sem duplicar) e `findBySubgroup()`; o filtro da tela
+  de adicionar exercício usa `filterGroups()` e o mesmo `Catalog.search()`
+  (filtra por grupo principal **ou** por subgrupo, preservando a pesquisa por
+  nome). O rótulo exibido compõe os dois (`Pernas · Quadríceps`). O campo é
+  **aditivo/opcional**: ids, `grupoMuscular`, imagens, equipamentos,
+  instruções e as rotinas salvas permanecem intactos.
 - **`catalogItem(id)` com fallback**: rotinas antigas com `catalogId` inexistente
   não quebram mais a renderização (recebem um item "Exercício removido").
 - **`EventBus` (`js/events.js`)**: porte fiel do pub/sub do TreinoTracker

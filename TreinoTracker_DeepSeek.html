@@ -945,13 +945,21 @@
     function renderCatalogFilters() {
         const container = document.getElementById('catalog-filters');
         if (!container) return;
-        const groups = (typeof Catalog !== 'undefined') ? Catalog.groups() : [];
+        // Grupos principais + subgrupos específicos (Quadríceps, Posterior de Coxa,
+        // Panturrilha, Lombar) filtram pelo mesmo mecanismo do Catalog.
+        const groups = (typeof Catalog !== 'undefined') ? Catalog.filterGroups() : [];
         const chips = ['all'].concat(groups);
         container.innerHTML = chips.map(g => `
             <button class="filter-btn ${state.catalogFilter === g ? 'active' : ''}" onclick="filterCatalog('${g}')">
                 ${g === 'all' ? translations[state.lang].all : g}
             </button>
         `).join('');
+    }
+
+    /** Rótulo exibido: grupo principal e, quando houver, o grupo específico. */
+    function muscleLabel(item) {
+        if (!item) return '';
+        return item.subgroup ? item.muscle + ' · ' + item.subgroup : item.muscle;
     }
 
     function renderCatalog() {
@@ -970,7 +978,7 @@
         container.innerHTML = filtered.map(c => `
             <div class="catalog-item">
                 <img src="${c.img}">
-                <div class="info"><h4>${c.name}</h4><p>${c.muscle}</p></div>
+                <div class="info"><h4>${c.name}</h4><p>${muscleLabel(c)}</p></div>
                 <button class="btn-add-circle" onclick="addExerciseToRoutine('${c.id}')">+</button>
             </div>
         `).join('');
