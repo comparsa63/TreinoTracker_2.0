@@ -748,6 +748,7 @@
 <script src="js/pr.js"></script>
 <script src="js/workout-session.js"></script>
 <script src="js/rest-timer.js"></script>
+<script src="js/wake-lock.js"></script>
 <script src="js/workout-controller.js"></script>
 
 <script>
@@ -1065,6 +1066,24 @@
         }).join('');
     }
 
+    // ================= LÓGICA: TELA ACESA (Sprint 4 / E4) =================
+    // A tela acesa só faz sentido com um treino ATIVO no Player. Toda a
+    // conversa com `navigator.wakeLock` vive em js/wake-lock.js (adaptador):
+    // aqui só se declara a INTENÇÃO, em contexto de ação do usuário.
+    // Sem o módulo (script antigo) ou sem suporte/rejeição do navegador, o
+    // treino segue normalmente — nunca lança daqui para cima.
+    function syncWakeLock(shouldHold, reason) {
+        if (typeof WakeLock === 'undefined' || !WakeLock) return;
+        try {
+            const out = WakeLock.setEnabled(shouldHold, reason || 'player');
+            if (out && typeof out.catch === 'function') {
+                out.catch(err => console.warn('[WakeLock] bloqueio de tela indisponível:', err));
+            }
+        } catch (err) {
+            console.warn('[WakeLock] bloqueio de tela indisponível:', err);
+        }
+    }
+
     function startWorkoutSession() {
         const routine = state.routines.find(x => x.id === state.editingRoutineId);
 
@@ -1092,6 +1111,9 @@
 
         navigate('player');
         updatePlayerUI();
+        // Treino ativo no Player: pede a tela acesa na MESMA ação do usuário
+        // que iniciou o treino (contexto exigido pelo navegador).
+        syncWakeLock(true, 'start');
     }
 
     // FUNÇÃO DO TOGGLE
@@ -1169,6 +1191,8 @@
 
         // Treino já concluído: este toque CONFIRMA o registro no histórico.
         if (s.status === 'finished' || s.isFinished) {
+            // Sessão encerrada: não há mais motivo para manter a tela acesa.
+            syncWakeLock(false, 'finished');
             saveSessionToHistory('completed');
             state.session = null;
             sessionPendingDecision = false;
@@ -1198,7 +1222,12 @@
         // Sem descanso quando o exercício mudou ou o treino terminou
         // (mesmo comportamento de antes).
         const advanced = result.session.currentExerciseIndex !== before.ex;
-        if (result.isFinished || advanced) return;
+        if (result.isFinished || advanced) {
+            // Última série: a sessão se encerrou sozinha -> solta a tela acesa
+            // (o toque final só confirma o histórico).
+            if (result.isFinished) syncWakeLock(false, 'finished');
+            return;
+        }
 
         // VERIFICA SE O DESCANSO AUTOMÁTICO ESTÁ LIGADO ANTES DE INICIAR O TIMER
         if (state.autoRestEnabled) {
@@ -1217,6 +1246,8 @@
             return false;
         }
         updatePlayerUI();
+        // Sessão pausada: manter a tela acesa é bloqueio desnecessário.
+        syncWakeLock(false, 'paused');
         return true;
     }
 
@@ -1228,6 +1259,8 @@
             return false;
         }
         updatePlayerUI();
+        // Treino voltou a andar: a tela acesa volta junto.
+        syncWakeLock(true, 'resumed');
         return true;
     }
 
@@ -1307,6 +1340,8 @@
     }
 
     function saveAndExit() {
+        // Sai do Player: a tela acesa vai junto (o histórico é gravado abaixo).
+        syncWakeLock(false, 'exit');
         saveSessionToHistory('partial');
         state.session = null;
         sessionPendingDecision = false;
@@ -1316,6 +1351,7 @@
     }
 
     function discardAndExit() {
+        syncWakeLock(false, 'discard');
         state.session = null;
         sessionPendingDecision = false;
         // Sprint 4: descartar remove a sessão persistida e NADA mais
@@ -1348,10 +1384,15 @@
         }
         navigate('player');
         updatePlayerUI();
+        // Volta ao Player com treino em andamento -> tela acesa de novo. Uma
+        // sessão já finalizada (só aguardando confirmação) não deve manter o
+        // bloqueio ligado.
+        syncWakeLock(state.session.status === 'active', 'resume');
     }
 
     function discardRestoredSession() {
         closeResumeModal();
+        syncWakeLock(false, 'discard');
         state.session = null;
         sessionPendingDecision = false;
         WorkoutController.clear();
@@ -1545,6 +1586,15 @@
         if (confirmOk) confirmOk.addEventListener('click', confirmModalAccept);
 
         navigate('home');
+
+        // Sprint 4 / E4: o navegador libera a tela acesa quando a aba sai de
+        // foco; ao voltar, o adaptador reavalia sozinho se ainda há treino
+        // ativo. UM listener por carregamento (attach é idempotente) e limpeza
+        // explícita quando a página é descarregada.
+        if (typeof WakeLock !== 'undefined' && WakeLock) {
+            WakeLock.attach(document);
+            window.addEventListener('pagehide', () => WakeLock.detach());
+        }
     });
 
 </script>

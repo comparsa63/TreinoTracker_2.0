@@ -86,6 +86,11 @@ function isDateValue(v) {
   return Object.prototype.toString.call(v) === "[object Date]";
 }
 
+/** Deixa a fila de microtasks/eventos drenar (APIs assíncronas do adaptador). */
+function flushAsync() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 // ---------------------------------------------------------------------------
 // TTUtils
 // ---------------------------------------------------------------------------
@@ -1607,6 +1612,251 @@ function testWorkoutControllerRest() {
 }
 
 // ---------------------------------------------------------------------------
+// WakeLock — adaptador do Screen Wake Lock (E4)
+// ---------------------------------------------------------------------------
+/** Sandbox com `navigator.wakeLock` e `document` simulados (promises reais). */
+function makeWakeSandbox() {
+  const sb = makeSandbox();
+  const fake = { mode: "resolve", requests: 0, lastType: null, sentinels: [] };
+
+  function makeSentinel() {
+    const s = {
+      released: false,
+      listeners: [],
+      addEventListener(type, fn) { if (type === "release") s.listeners.push(fn); },
+      removeEventListener(type, fn) {
+        if (type === "release") s.listeners = s.listeners.filter((f) => f !== fn);
+      },
+      release() {
+        if (s.released) return Promise.reject(new Error("sentinel já liberado"));
+        s.released = true;
+        s.listeners.slice().forEach((fn) => fn());
+        return Promise.resolve();
+      },
+      /** Simula o NAVEGADOR liberando sozinho (aba escondida, troca de app). */
+      browserRelease() { s.released = true; s.listeners.slice().forEach((fn) => fn()); },
+    };
+    fake.sentinels.push(s);
+    return s;
+  }
+
+  sb.navigator = {
+    wakeLock: {
+      request(type) {
+        fake.requests++;
+        fake.lastType = type;
+        if (fake.mode === "throw") throw new Error("falha síncrona");
+        if (fake.mode === "reject") return Promise.reject(new Error("NotAllowedError"));
+        return Promise.resolve(makeSentinel());
+      },
+    },
+  };
+
+  const doc = {
+    visibilityState: "visible",
+    handlers: [],
+    addEventListener(type, fn) { if (type === "visibilitychange") doc.handlers.push(fn); },
+    removeEventListener(type, fn) {
+      if (type === "visibilitychange") doc.handlers = doc.handlers.filter((f) => f !== fn);
+    },
+    fire() { doc.handlers.slice().forEach((fn) => fn()); },
+  };
+  sb.document = doc;
+
+  return {
+    sb, fake, doc,
+    lastSentinel: () => fake.sentinels[fake.sentinels.length - 1],
+  };
+}
+
+async function testWakeLock() {
+  suite("WakeLock (adaptador de tela acesa)");
+
+  // ---- carrega sem ambiente de navegador (Node/vm) ------------------------
+  const bare = makeSandbox();
+  loadModules(bare, ["js/wake-lock.js"]);
+  const WB = bare.WakeLock;
+  ok("carrega sem navigator/document e expõe a API",
+    !!WB && typeof WB.request === "function" && typeof WB.release === "function" &&
+      typeof WB.setEnabled === "function" && typeof WB.onVisibility === "function" &&
+      typeof WB.attach === "function" && typeof WB.isSupported === "function");
+  ok("module.exports expõe a mesma API",
+    typeof require(path.join(ROOT, "js", "wake-lock.js")).setEnabled === "function");
+  ok("sem navigator.wakeLock -> isSupported false", WB.isSupported() === false);
+  const bareReq = await WB.setEnabled(true, "test");
+  ok("sem suporte: intenção registrada, nada adquirido e nada lançado",
+    bareReq.ok === false && bareReq.reason === "unsupported" && bareReq.active === false &&
+      bareReq.enabled === true && bareReq.error === null && bareReq.message.length > 0);
+  ok("sem suporte: release é seguro e zera a intenção",
+    (await WB.release("test")).ok === true && WB.status().enabled === false && WB.status().active === false);
+  ok("sem document: attach devolve false", WB.attach() === false && WB.attach(null) === false);
+  ok("sem document: onVisibility não quebra", (await WB.onVisibility(true)).ok === true);
+  WB.reset();
+
+  // ---- API disponível: aquisição e idempotência ---------------------------
+  const env = makeWakeSandbox();
+  loadModules(env.sb, ["js/wake-lock.js"]);
+  const W = env.sb.WakeLock;
+  const F = env.fake;
+
+  ok("isSupported true com navigator.wakeLock", W.isSupported() === true);
+  // O app instala o listener de visibilidade uma vez, no boot (ver wiring).
+  ok("attach no boot instala UM listener de visibilitychange",
+    W.attach(env.doc) === true && env.doc.handlers.length === 1 && W.status().attached === true);
+  const r1 = await W.setEnabled(true, "start");
+  ok("solicitação bem-sucedida cria o bloqueio",
+    r1.ok === true && r1.acquired === true && r1.active === true && r1.enabled === true && r1.reason === null);
+  ok("pediu o tipo 'screen' e SÓ uma vez", F.requests === 1 && F.lastType === "screen");
+  ok("status reporta o bloqueio vivo",
+    W.status().supported === true && W.status().active === true && W.status().enabled === true);
+
+  const r2 = await W.request("again");
+  ok("chamada repetida reaproveita o sentinel vivo",
+    r2.ok === true && r2.acquired === false && r2.active === true && F.requests === 1);
+  await W.setEnabled(true, "again");
+  ok("setEnabled(true) repetido não gera nova solicitação", F.requests === 1);
+
+  W.reset();
+  const nConc = F.requests;
+  const both = await Promise.all([W.request("a"), W.request("b")]);
+  ok("solicitações concorrentes não duplicam (inflight reaproveitado)",
+    F.requests === nConc + 1 && both[0].active === true && both[1].active === true);
+
+  // ---- liberação explícita ------------------------------------------------
+  const liveConc = env.lastSentinel();
+  const rel = await W.release("exit");
+  ok("liberação explícita derruba o bloqueio e zera a intenção",
+    rel.ok === true && rel.active === false && W.isActive() === false && W.isEnabled() === false);
+  ok("sentinel realmente liberado e sem listener órfão",
+    liveConc.released === true && liveConc.listeners.length === 0);
+  const nAfterRel = F.requests;
+  const rel2 = await W.release("exit-again");
+  ok("liberar de novo é no-op (sem nova solicitação, sem sentinel morto)",
+    rel2.ok === true && rel2.active === false && F.requests === nAfterRel);
+
+  // ---- liberação inesperada do sentinel -----------------------------------
+  W.reset();
+  await W.request("start");
+  const live = env.lastSentinel();
+  live.browserRelease();
+  ok("liberação inesperada (navegador) zera o bloqueio e MANTÉM a intenção",
+    W.isActive() === false && W.isEnabled() === true);
+  ok("listener de release também sai junto", live.listeners.length === 0);
+  const nUnexpected = F.requests;
+  const back = await W.onVisibility(true);
+  ok("ao voltar a ficar visível, reavalia e re-adquire",
+    back.ok === true && back.active === true && F.requests === nUnexpected + 1);
+
+  // ---- aba escondida ------------------------------------------------------
+  // `reset()` é teardown COMPLETO (derruba intenção, sentinel e listener); o
+  // app instala o listener a cada carregamento, então re-instalamos aqui para
+  // exercitar o caminho de visibilidade.
+  W.attach(env.doc);
+  ok("re-attach após teardown volta a observar a visibilidade",
+    env.doc.handlers.length === 1 && W.status().attached === true);
+  const nHidden = F.requests;
+  env.doc.visibilityState = "hidden";
+  env.lastSentinel().browserRelease(); // o navegador libera ao esconder
+  env.doc.fire();
+  await flushAsync();
+  ok("aba escondida: sem bloqueio vivo e intenção preservada",
+    W.isActive() === false && W.isEnabled() === true && F.requests === nHidden);
+  env.doc.visibilityState = "visible";
+  env.doc.fire();
+  await flushAsync();
+  ok("aba visível de novo: o listener ÚNICO re-adquire sozinho",
+    W.isActive() === true && F.requests === nHidden + 1);
+
+  await W.release("pause");
+  const nIdle = F.requests;
+  env.doc.visibilityState = "hidden"; env.doc.fire();
+  env.doc.visibilityState = "visible"; env.doc.fire();
+  await flushAsync();
+  ok("visibilidade sem intenção não adquire nada", W.isActive() === false && F.requests === nIdle);
+
+  env.doc.visibilityState = "hidden";
+  const hiddenReq = await W.setEnabled(true, "hidden");
+  ok("com a aba escondida não se pede bloqueio (o navegador rejeitaria)",
+    hiddenReq.ok === false && hiddenReq.reason === "hidden" && hiddenReq.active === false &&
+      hiddenReq.enabled === true && F.requests === nIdle);
+  env.doc.visibilityState = "visible";
+  ok("ao reaparecer, adquire de fato",
+    (await W.onVisibility(true)).active === true && F.requests === nIdle + 1);
+
+  // ---- attach/detach (um único listener) ----------------------------------
+  W.detach();
+  ok("detach sem listener devolve false (idempotente)", W.detach() === false);
+  ok("attach instala UM listener de visibilitychange",
+    W.attach(env.doc) === true && env.doc.handlers.length === 1 && W.status().attached === true);
+  ok("attach repetido NÃO duplica listener",
+    W.attach(env.doc) === true && env.doc.handlers.length === 1);
+  ok("attach em documento inválido devolve false", W.attach({}) === false && env.doc.handlers.length === 1);
+  ok("detach limpa o listener", W.detach() === true && env.doc.handlers.length === 0);
+
+  W.attach(env.doc);
+  await W.request("x");
+  ok("reset limpa intenção, bloqueio e listeners",
+    W.reset() === true && W.status().enabled === false && W.status().active === false &&
+      W.status().attached === false && env.doc.handlers.length === 0);
+
+  // ---- rejeição e erro síncrono -------------------------------------------
+  const broken = makeWakeSandbox();
+  broken.fake.mode = "reject";
+  loadModules(broken.sb, ["js/wake-lock.js"]);
+  const Wr = broken.sb.WakeLock;
+  const rej = await Wr.setEnabled(true, "start");
+  ok("solicitação rejeitada degrada em ok:false (sem lançar)",
+    rej.ok === false && rej.reason === "rejected" && rej.active === false && rej.enabled === true &&
+      typeof rej.error === "string" && rej.message.length > 0);
+  ok("rejeição não deixa sentinel nem listener pendurado",
+    Wr.status().active === false && broken.fake.sentinels.length === 0);
+
+  broken.fake.mode = "throw";
+  Wr.reset();
+  const thr = await Wr.setEnabled(true, "start");
+  ok("erro SÍNCRONO do navegador também vira ok:false",
+    thr.ok === false && thr.reason === "rejected" && thr.active === false);
+
+  broken.fake.mode = "resolve";
+  Wr.reset();
+  await Wr.request("start");
+  broken.lastSentinel().release = () => Promise.reject(new Error("sentinel liberado"));
+  const relStuck = await Wr.release("exit");
+  ok("falha ao liberar não vira exceção e o estado fica limpo",
+    relStuck.ok === true && relStuck.active === false && typeof relStuck.error === "string" &&
+      Wr.status().active === false && Wr.status().enabled === false);
+
+  // ---- erro de Wake Lock NÃO impede o treino ------------------------------
+  const flow = makeWakeSandbox();
+  flow.fake.mode = "reject";
+  loadModules(flow.sb, [
+    "js/utils.js", "services/storage.js", "js/i18n.js", "js/workout-session.js",
+    "js/rest-timer.js", "js/persistence.js", "js/pr.js", "js/wake-lock.js",
+    "js/workout-controller.js",
+  ]);
+  const CF = flow.sb.WorkoutController;
+  const RF = flow.sb.RestTimer;
+  const t0 = new Date("2026-10-18T10:00:00.000Z");
+  const t1 = new Date("2026-10-18T10:10:00.000Z");
+  const routine = {
+    id: "rA", letter: "A", name: "Peito",
+    exercises: [{ catalogId: "C-02", sets: 1, reps: 10, weight: 40, rest: 60 }],
+  };
+  const resolveItem = (id) => ({ name: "Ex " + id, muscle: "Peito", img: "x.jpg" });
+
+  const wakeFail = await flow.sb.WakeLock.setEnabled(true, "start");
+  const started = CF.start(routine, resolveItem, t0);
+  const set1 = CF.completeSet(started.session, { weight: 40, reps: 10 }, t0);
+  const rest = CF.restStart(started.session, 60, t0);
+  const restOk = rest.ok === true && RF.snapshot(rest.timer, t0).remainingMs === 60000;
+  const fin = CF.finish(started.session, t1);
+  const entry = CF.buildHistoryEntry(started.session, "completed", t1);
+  ok("erro de Wake Lock não impede iniciar, executar, descansar e finalizar",
+    wakeFail.ok === false && started.ok === true && set1.ok === true && set1.isFinished === true &&
+      restOk === true && fin.ok === true && !!entry && entry.status === "completed");
+}
+
+// ---------------------------------------------------------------------------
 // Wiring estático do HTML
 // ---------------------------------------------------------------------------
 function testWiring() {
@@ -1614,7 +1864,7 @@ function testWiring() {
 
   const html = fs.readFileSync(path.join(ROOT, "TreinoTracker_DeepSeek.html"), "utf8");
 
-  const order = ["js/utils.js", "services/storage.js", "js/i18n.js", "js/data/exercises.js", "js/catalog.js", "js/events.js", "js/routine-actions.js", "js/pr.js", "js/workout-session.js", "js/rest-timer.js", "js/workout-controller.js"].map((src) => ({
+  const order = ["js/utils.js", "services/storage.js", "js/i18n.js", "js/data/exercises.js", "js/catalog.js", "js/events.js", "js/routine-actions.js", "js/pr.js", "js/workout-session.js", "js/rest-timer.js", "js/wake-lock.js", "js/workout-controller.js"].map((src) => ({
     src,
     at: html.indexOf('src="' + src + '"'),
   }));
@@ -1670,6 +1920,26 @@ function testWiring() {
     html.includes("function startRestTimer(") && html.includes("state.restTimer.time") &&
       html.includes('id="rest-overlay"') && !/WorkoutController\.restStart\(/.test(html));
 
+  // Sprint 4 / E4 — tela acesa: adaptador isolado + intenção no ciclo do Player
+  const wakeSrc = fs.readFileSync(path.join(ROOT, "js", "wake-lock.js"), "utf8");
+  const wakeCode = wakeSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  ok("tela acesa: adaptador isolado do domínio (sem sessão/descanso/persistência)",
+    !/\bWorkoutSession\b|\bRestTimer\b|\bWorkoutController\b|\bPersistence\b|\bEventBus\b|\blocalStorage\b/.test(wakeCode));
+  ok("tela acesa: adaptador fala com navigator.wakeLock e pede o tipo 'screen'",
+    /navigator/.test(wakeCode) && /wakeLock/.test(wakeCode) && wakeCode.includes('"screen"'));
+  ok("tela acesa: a UI guarda o módulo e nunca deixa o erro subir",
+    html.includes("function syncWakeLock(shouldHold, reason)") &&
+      html.includes("typeof WakeLock === 'undefined'") && html.includes("WakeLock.setEnabled("));
+  ok("tela acesa: intenção segue o ciclo do Player",
+    html.includes("syncWakeLock(true, 'start')") && html.includes("syncWakeLock(false, 'paused')") &&
+      html.includes("syncWakeLock(true, 'resumed')") && html.includes("syncWakeLock(false, 'finished')") &&
+      html.includes("syncWakeLock(false, 'exit')") && html.includes("syncWakeLock(false, 'discard')"));
+  ok("tela acesa: sessão recuperada só bloqueia se estiver ATIVA",
+    html.includes("syncWakeLock(state.session.status === 'active', 'resume')"));
+  ok("tela acesa: listener único de visibilidade + limpeza no descarregamento",
+    html.includes("WakeLock.attach(document)") && html.includes("WakeLock.detach()") &&
+      html.includes("'pagehide'"));
+
   const homeBlock = html.match(/<section id="screen-home"[\s\S]*?<\/section>/)[0];
   ok("nenhum <script>/<link> foi enfiado DENTRO do bloco da Home",
     !/<script|<link/i.test(homeBlock));
@@ -1680,28 +1950,31 @@ function testWiring() {
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
-testUtils();
-testUtilsDates();
-testStorage();
-testEvents();
-testI18n();
-testPersistence();
-testPersistence2C();
-testCatalog();
-testPR();
-testRoutineActions();
-testWorkoutSession();
-testPersistenceSession();
-testRestTimer();
-testWorkoutController();
-testWorkoutControllerRest();
-testWiring();
+(async function main() {
+  testUtils();
+  testUtilsDates();
+  testStorage();
+  testEvents();
+  testI18n();
+  testPersistence();
+  testPersistence2C();
+  testCatalog();
+  testPR();
+  testRoutineActions();
+  testWorkoutSession();
+  testPersistenceSession();
+  testRestTimer();
+  await testWakeLock();
+  testWorkoutController();
+  testWorkoutControllerRest();
+  testWiring();
 
-console.log("\n==========================================");
-console.log(passed + " checagens OK, " + failures.length + " falha(s)");
-if (failures.length) {
-  console.log("\nFALHAS:");
-  failures.forEach((f) => console.log("  x " + f));
-  process.exit(1);
-}
-console.log("Tudo certo.");
+  console.log("\n==========================================");
+  console.log(passed + " checagens OK, " + failures.length + " falha(s)");
+  if (failures.length) {
+    console.log("\nFALHAS:");
+    failures.forEach((f) => console.log("  x " + f));
+    process.exit(1);
+  }
+  console.log("Tudo certo.");
+})();

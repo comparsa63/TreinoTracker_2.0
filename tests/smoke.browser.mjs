@@ -750,6 +750,43 @@ async function main() {
       restWiring.recusaSemSessao === "no-session" && restWiring.elementos === true,
     JSON.stringify(restWiring));
 
+  // --- E4: a tela acesa acompanha o ciclo do Player -------------------------
+  // Intenção declarada (`enabled`) NÃO é o mesmo que bloqueio vivo (`active`):
+  // o segundo depende do navegador/contexto. O que se verifica é que a
+  // intenção segue o ciclo do Player e que nada quebra quando não há suporte.
+  const wakeCycle = await ev(`(function(){
+    const W = window.WakeLock;
+    const exposto = !!W && typeof W.setEnabled === 'function' && typeof W.attach === 'function';
+    const inicial = exposto ? W.status() : null;
+    state.editingRoutineId = state.routines[0].id;
+    state.session = null;
+    startWorkoutSession();
+    const ativo = W.status();
+    pauseWorkout();
+    const pausado = W.status();
+    resumeWorkout(new Date());
+    const retomado = W.status();
+    discardAndExit();
+    const saiu = W.status();
+    return {
+      exposto: exposto,
+      suportado: typeof inicial.supported === 'boolean',
+      attached: inicial.attached === true,
+      semBloqueioInicial: inicial.active === false && inicial.enabled === false,
+      ativo: ativo.enabled, pausado: pausado.enabled, retomado: retomado.enabled, saiu: saiu.enabled,
+      semBloqueioFinal: saiu.active === false,
+      sessaoLimpa: state.session === null,
+      foraDoPlayer: !document.getElementById('screen-player').classList.contains('active')
+    };
+  })()`);
+  check("E4: tela acesa segue o ciclo do Player e não quebra o treino",
+    wakeCycle.exposto === true && wakeCycle.suportado === true && wakeCycle.attached === true &&
+      wakeCycle.semBloqueioInicial === true &&
+      wakeCycle.ativo === true && wakeCycle.pausado === false && wakeCycle.retomado === true &&
+      wakeCycle.saiu === false && wakeCycle.semBloqueioFinal === true &&
+      wakeCycle.sessaoLimpa === true && wakeCycle.foraDoPlayer === true,
+    JSON.stringify(wakeCycle));
+
   // --- Erros de JS ----------------------------------------------------------
   const realErrors = jsErrors.filter((e) => !/unsplash|net::ERR|Failed to load resource|ERR_BLOCKED/i.test(e));
   check("nenhum erro de JS no console", realErrors.length === 0, realErrors.slice(0, 3).join(" | "));
