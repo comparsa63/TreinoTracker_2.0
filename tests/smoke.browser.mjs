@@ -787,6 +787,222 @@ async function main() {
       wakeCycle.sessaoLimpa === true && wakeCycle.foraDoPlayer === true,
     JSON.stringify(wakeCycle));
 
+  // --- E5: pausa/retomada + descanso medido pelo DOMÍNIO (prazo absoluto) ----
+  // 1) série REAL abre o descanso com o tempo vindo do domínio
+  const restE5 = await ev(`(function(){
+    state.editingRoutineId = state.routines[0].id;   // rotina A: descanso de 60s
+    state.session = null;
+    startWorkoutSession();
+    completeSet();
+    const t0 = restSnapshot(new Date());
+    const antes = t0.remainingMs;
+    adjustRestTime(15);
+    const mais = restSnapshot(new Date()).remainingMs;
+    adjustRestTime(-15);
+    const menos = restSnapshot(new Date()).remainingMs;
+    return {
+      noPlayer: document.getElementById('screen-player').classList.contains('active'),
+      overlay: document.getElementById('rest-overlay').classList.contains('active'),
+      display: document.getElementById('rest-timer-display').innerText,
+      ticker: state.restTimer.id !== null,
+      temTimer: !!state.restTimer.timer,
+      autoRest: state.autoRestEnabled,
+      setCompleta: state.session.exercises[0].setsCompleted,
+      total: t0.durationMs, restante: antes, status: t0.status,
+      mais: mais, menos: menos, totalDepois: restSnapshot(new Date()).durationMs
+    };
+  })()`);
+  check("E5: concluir série abre o descanso medido pelo domínio (prazo absoluto)",
+    restE5.noPlayer === true && restE5.overlay === true && restE5.ticker === true &&
+      restE5.temTimer === true && restE5.autoRest === true && restE5.setCompleta === 1 &&
+      restE5.total === 60000 && restE5.restante > 59000 && restE5.status === 'running' &&
+      /^0[01]:\d\d$/.test(restE5.display),
+    JSON.stringify(restE5));
+  check("E5: ±15s passa pelo domínio (a duração planejada acompanha o acréscimo)",
+    restE5.mais - restE5.restante > 14000 && restE5.mais - restE5.restante <= 15500 &&
+      restE5.menos <= restE5.restante && restE5.totalDepois >= restE5.mais,
+    JSON.stringify({ antes: restE5.restante, mais: restE5.mais, menos: restE5.menos, total: restE5.totalDepois }));
+
+  // 2) pausar o TREINO congela o descanso e a UI reflete o estado
+  const pausaE5 = await ev(`(function(){
+    togglePauseWorkout();
+    const snap = restSnapshot(new Date());
+    return {
+      sessao: state.session.status, descanso: snap.status, restante: snap.remainingMs,
+      display: document.getElementById('rest-timer-display').innerText,
+      ticker: state.restTimer.id !== null,
+      botao: document.getElementById('btn-pause-resume').innerText,
+      esperado: translations[state.lang].resume_workout,
+      cta: document.getElementById('btn-complete-set').innerText,
+      esperadoCta: translations[state.lang].workout_paused
+    };
+  })()`);
+  check("E5: pausar congela o descanso e a UI reflete o estado",
+    pausaE5.sessao === 'paused' && pausaE5.descanso === 'paused' && pausaE5.ticker === true &&
+      pausaE5.botao === pausaE5.esperado && pausaE5.cta === pausaE5.esperadoCta,
+    JSON.stringify(pausaE5));
+
+  await sleep(700);
+  const congeladoE5 = await ev(`(function(){
+    const snap = restSnapshot(new Date());
+    return {
+      restante: snap.remainingMs, status: snap.status,
+      display: document.getElementById('rest-timer-display').innerText,
+      recusa: WorkoutController.completeSet(state.session, { weight: 1, reps: 1 }, new Date()).reason
+    };
+  })()`);
+  check("E5: descanso pausado não consome tempo (o ticker não é fonte de verdade)",
+    congeladoE5.status === 'paused' && congeladoE5.display === pausaE5.display &&
+      Math.abs(congeladoE5.restante - pausaE5.restante) < 60,
+    JSON.stringify({ antes: pausaE5.restante, depois: congeladoE5.restante, display: congeladoE5.display }));
+  check("E5: sessão pausada recusa concluir série (quem decide é o domínio)",
+    congeladoE5.recusa === 'not-active', congeladoE5.recusa);
+
+  // 3) retomar volta a contar do ponto congelado
+  const retomaE5 = await ev(`(function(){
+    togglePauseWorkout();
+    const snap = restSnapshot(new Date());
+    return {
+      sessao: state.session.status, descanso: snap.status, restante: snap.remainingMs,
+      botao: document.getElementById('btn-pause-resume').innerText,
+      esperado: translations[state.lang].pause_workout
+    };
+  })()`);
+  await sleep(700);
+  const andandoE5 = await ev(`(function(){ const s = restSnapshot(new Date()); return { restante: s.remainingMs, status: s.status }; })()`);
+  check("E5: retomar volta a contar do ponto congelado (sem perder nem dobrar tempo)",
+    retomaE5.sessao === 'active' && retomaE5.descanso === 'running' &&
+      retomaE5.botao === retomaE5.esperado &&
+      Math.abs(retomaE5.restante - congeladoE5.restante) < 60 &&
+      andandoE5.restante < retomaE5.restante - 400,
+    JSON.stringify({ congelado: congeladoE5.restante, retomado: retomaE5.restante, depois: andandoE5.restante }));
+
+  // 4) pular encerra pelo domínio e mata o ticker
+  const puloE5 = await ev(`(function(){
+    skipRest();
+    return {
+      overlay: document.getElementById('rest-overlay').classList.contains('active'),
+      tickerCancelado: state.restTimer.id === null,
+      timerDescartado: state.restTimer.timer === null,
+      sessao: state.session ? state.session.status : null
+    };
+  })()`);
+  check("E5: pular encerra o descanso, fecha o overlay e cancela o ticker",
+    puloE5.overlay === false && puloE5.tickerCancelado === true &&
+      puloE5.timerDescartado === true && puloE5.sessao === 'active',
+    JSON.stringify(puloE5));
+
+  // 5) sair do Player com descanso aberto NÃO deixa interval órfão (fim do vazamento)
+  const saidaE5 = await ev(`(function(){
+    startRestTimer(60);
+    const aberto = document.getElementById('rest-overlay').classList.contains('active');
+    const tickerAntes = state.restTimer.id !== null;
+    saveAndExit();
+    return {
+      aberto: aberto, tickerAntes: tickerAntes,
+      overlayFinal: document.getElementById('rest-overlay').classList.contains('active'),
+      tickerFinal: state.restTimer.id !== null,
+      timerFinal: state.restTimer.timer !== null,
+      sessaoFinal: state.session === null,
+      home: document.getElementById('screen-home').classList.contains('active')
+    };
+  })()`);
+  check("E5: sair do Player com descanso aberto encerra timer e ticker (sem vazamento)",
+    saidaE5.aberto === true && saidaE5.tickerAntes === true && saidaE5.overlayFinal === false &&
+      saidaE5.tickerFinal === false && saidaE5.timerFinal === false &&
+      saidaE5.sessaoFinal === true && saidaE5.home === true,
+    JSON.stringify(saidaE5));
+
+  // 6) descanso curto vence sozinho e encerra pelo domínio (settle)
+  const venceE5 = await ev(`(function(){
+    state.editingRoutineId = state.routines[0].id;
+    state.session = null;
+    startWorkoutSession();
+    const abriu = startRestTimer(1);
+    return { abriu: abriu, overlay: document.getElementById('rest-overlay').classList.contains('active') };
+  })()`);
+  await sleep(1700);
+  const vencidoE5 = await ev(`(function(){
+    return {
+      overlay: document.getElementById('rest-overlay').classList.contains('active'),
+      tickerCancelado: state.restTimer.id === null,
+      timerDescartado: state.restTimer.timer === null
+    };
+  })()`);
+  check("E5: descanso que vence fecha sozinho e encerra pelo domínio",
+    venceE5.abriu === true && venceE5.overlay === true && vencidoE5.overlay === false &&
+      vencidoE5.tickerCancelado === true && vencidoE5.timerDescartado === true,
+    JSON.stringify({ ...venceE5, ...vencidoE5 }));
+
+  // 7) pausado, o prazo estourado NÃO encerra o descanso (pausa congela de propósito)
+  const pausaVencidaE5 = await ev(`(function(){
+    startRestTimer(1);
+    togglePauseWorkout();
+    const snap = restSnapshot(new Date());
+    return {
+      overlay: document.getElementById('rest-overlay').classList.contains('active'),
+      restante: snap.remainingMs, status: snap.status
+    };
+  })()`);
+  await sleep(1700);
+  const aindaParadoE5 = await ev(`(function(){
+    const snap = restSnapshot(new Date());
+    return {
+      overlay: document.getElementById('rest-overlay').classList.contains('active'),
+      restante: snap.remainingMs, status: snap.status, ticker: state.restTimer.id !== null
+    };
+  })()`);
+  check("E5: descanso pausado não vence nem com o prazo estourado",
+    pausaVencidaE5.overlay === true && pausaVencidaE5.status === 'paused' &&
+      aindaParadoE5.overlay === true && aindaParadoE5.status === 'paused' &&
+      aindaParadoE5.ticker === true &&
+      Math.abs(aindaParadoE5.restante - pausaVencidaE5.restante) < 60,
+    JSON.stringify({ ...pausaVencidaE5, ...aindaParadoE5 }));
+
+  // 8) limpeza final
+  const limpezaE5 = await ev(`(function(){
+    skipRest();
+    discardAndExit();
+    return {
+      overlay: document.getElementById('rest-overlay').classList.contains('active'),
+      tickerFinal: state.restTimer.id !== null,
+      sessaoFinal: state.session === null,
+      home: document.getElementById('screen-home').classList.contains('active')
+    };
+  })()`);
+  check("E5: descartar a sessão limpa descanso, ticker e estado",
+    limpezaE5.overlay === false && limpezaE5.tickerFinal === false &&
+      limpezaE5.sessaoFinal === true && limpezaE5.home === true,
+    JSON.stringify(limpezaE5));
+
+  // 9) sessão FINALIZADA: a UI não inventa estado (a recusa vem do controlador)
+  const finalE5 = await ev(`(function(){
+    state.editingRoutineId = state.routines[0].id;
+    state.session = null;
+    startWorkoutSession();
+    WorkoutController.finish(state.session, new Date());
+    updatePlayerUI();
+    const antes = state.session.status;
+    const pausou = togglePauseWorkout();
+    const depois = state.session.status;
+    const botao = document.getElementById('btn-pause-resume').innerText;
+    const cta = document.getElementById('btn-complete-set').innerText;
+    discardAndExit();
+    return {
+      antes: antes, pausou: pausou, depois: depois, botao: botao, cta: cta,
+      esperado: translations[state.lang].pause_workout,
+      esperadoCta: translations[state.lang].finish_workout,
+      limpou: state.session === null &&
+        !document.getElementById('rest-overlay').classList.contains('active') &&
+        state.restTimer.id === null
+    };
+  })()`);
+  check("E5: sessão finalizada não pausa nem vira 'Retomar' (recusa do controlador)",
+    finalE5.antes === 'finished' && finalE5.pausou === false && finalE5.depois === 'finished' &&
+      finalE5.botao === finalE5.esperado && finalE5.cta === finalE5.esperadoCta &&
+      finalE5.limpou === true,
+    JSON.stringify(finalE5));
+
   // --- Erros de JS ----------------------------------------------------------
   const realErrors = jsErrors.filter((e) => !/unsplash|net::ERR|Failed to load resource|ERR_BLOCKED/i.test(e));
   check("nenhum erro de JS no console", realErrors.length === 0, realErrors.slice(0, 3).join(" | "));

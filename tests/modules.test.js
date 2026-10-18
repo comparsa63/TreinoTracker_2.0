@@ -181,7 +181,7 @@ function testI18n() {
   suite("I18n");
 
   ok("3 idiomas", I.LOCALES.join(",") === "pt,en,es");
-  eq("49 chaves", I.keys().length, 49);
+  eq("52 chaves (49 + 3 do Player na E5: pausa/retomada)", I.keys().length, 52);
 
   const ptKeys = Object.keys(I.dict.pt).sort();
   const enKeys = Object.keys(I.dict.en).sort();
@@ -1857,6 +1857,84 @@ async function testWakeLock() {
 }
 
 // ---------------------------------------------------------------------------
+// Player: pausa/retomada e descanso medido pelo domínio (E5)
+// ---------------------------------------------------------------------------
+function testWorkoutPlayerE5() {
+  suite("Player: pausa/retomada e descanso (E5)");
+
+  const html = fs.readFileSync(path.join(ROOT, "TreinoTracker_DeepSeek.html"), "utf8");
+
+  // --- i18n das chaves novas (pt/en/es) ------------------------------------
+  const sb = makeSandbox();
+  loadModules(sb, ["js/i18n.js"]);
+  const dict = sb.I18n.dict;
+  ["pause_workout", "resume_workout", "workout_paused"].forEach((k) => {
+    ok("i18n '" + k + "' nos 3 idiomas",
+      ["pt", "en", "es"].every((l) => dict[l] && typeof dict[l][k] === "string" &&
+        dict[l][k].length > 0 && dict[l][k] !== k));
+  });
+  ok("i18n: as chaves da Home seguem intactas",
+    dict.pt.last_workout === "Último Treino" && dict.en.last_workout === "Last Workout" &&
+      dict.es.last_workout === "Último Entreno");
+
+  // --- descanso medido pelo DOMÍNIO (o contador legado saiu) ---------------
+  ok("descanso: nada de contador decrementado na UI",
+    !/state\.restTimer\.time\b/.test(html) && !/restTimer\.isRunning/.test(html) &&
+      !/restTimer\.total\b/.test(html) && !/restTimer\.time--/.test(html));
+  ok("descanso: a UI conversa com o domínio (start/snapshot/add/skip/settle)",
+    html.includes("WorkoutController.restStart(") && html.includes("WorkoutController.restSnapshot(") &&
+      html.includes("WorkoutController.restAdd(") && html.includes("WorkoutController.restSkip(") &&
+      html.includes("WorkoutController.restSettle("));
+  ok("descanso: holder só guarda o timer e o id do ticker",
+    html.includes("restTimer: { timer: null, id: null }"));
+  ok("descanso: ticker é só de TELA (um por vez, cancela o anterior)",
+    html.includes("function startRestTicker()") &&
+      /function startRestTicker\(\)[\s\S]{0,200}?stopRestTicker\(\)/.test(html) &&
+      html.includes("setInterval(tickRest, REST_TICK_MS)"));
+  ok("descanso: render lê o restante CALCULADO (snapshot), não o tick",
+    html.includes("function renderRest(rest)") && html.includes("rest.remainingMs") &&
+      html.includes("rest.progress"));
+  ok("descanso: prazo vencido encerra pelo domínio (settle)",
+    /if \(rest\.finished\) \{[\s\S]{0,160}?endRest\('settle'\)/.test(html));
+  ok("descanso: botão Pular encerra pelo domínio (skip)",
+    /function skipRest\(\)[\s\S]{0,80}?endRest\('skip'\)/.test(html));
+  ok("descanso: encerrar pelo domínio e depois fechar (idempotente)",
+    /function endRest\(mode\)[\s\S]{0,520}?WorkoutController\.restSkip\(timer, now, state\.session\)[\s\S]{0,200}?closeRestOverlay\(\)/.test(html));
+
+  // --- fim do vazamento de intervalos -------------------------------------
+  ok("descanso: fechar o overlay cancela o ticker e descarta o timer",
+    /function closeRestOverlay\(\)[\s\S]{0,200}?stopRestTicker\(\)[\s\S]{0,200}?classList\.remove\('active'\)[\s\S]{0,200}?restTimer\.timer = null/.test(html));
+  ["saveAndExit", "discardAndExit", "discardRestoredSession", "resumeRestoredSession"].forEach((fn) => {
+    ok("descanso: " + fn + " não deixa ticker órfão",
+      new RegExp("function " + fn + "\\([^)]*\\)[\\s\\S]{0,500}?closeRestOverlay\\(\\)").test(html));
+  });
+  ok("descanso: finalizar (auto e confirmação) também fecha o descanso",
+    (html.match(/closeRestOverlay\(\);/g) || []).length >= 7);
+  ok("descanso: o interval só existe dentro do ticker (nada solto)",
+    (html.match(/setInterval\(/g) || []).length === 1);
+
+  // --- pausa/retomada do treino (UI) --------------------------------------
+  ok("pausa: botão único alterna pausa/retomada",
+    html.includes('id="btn-pause-resume"') && html.includes('onclick="togglePauseWorkout()"') &&
+      /function togglePauseWorkout\(\)[\s\S]{0,600}?resumeWorkout\(new Date\(\)\) : pauseWorkout\(\)/.test(html));
+  ok("pausa: rótulo e CTA vêm do ESTADO da sessão (sem cópia local)",
+    html.includes("const paused = s.status === 'paused'") &&
+      html.includes("'resume_workout' : 'pause_workout'") &&
+      html.includes('data-i18n="workout_paused"'));
+  ok("pausa: pausar sincroniza o descanso (D-C)",
+    /function pauseWorkout\(\)[\s\S]{0,600}?restSyncSession\(now\)/.test(html));
+  ok("pausa: retomar sincroniza o descanso (D-C)",
+    /function resumeWorkout\(now\)[\s\S]{0,700}?restSyncSession\(at\)/.test(html));
+  ok("pausa: restSyncSession usa o ponto único do controlador",
+    /function restSyncSession\(now\)[\s\S]{0,320}?WorkoutController\.restSync\(timer, state\.session/.test(html));
+  ok("pausa: sessão finalizada não inventa estado (recusa vem do controlador)",
+    /function togglePauseWorkout\(\)[\s\S]{0,420}?pauseWorkout\(\)/.test(html) &&
+      /function pauseWorkout\(\)[\s\S]{0,420}?showToast\(result\.message/.test(html) &&
+      html.includes("const paused = s.status === 'paused'"));
+}
+
+
+// ---------------------------------------------------------------------------
 // Wiring estático do HTML
 // ---------------------------------------------------------------------------
 function testWiring() {
@@ -1916,9 +1994,9 @@ function testWiring() {
       html.indexOf('src="js/rest-timer.js"') < html.indexOf("<script>\n    // ================= CATÁLOGO REAL"));
   ok("descanso: módulo não conhece DOM nem persistência",
     !/\bdocument\b|\blocalStorage\b|\bPersistence\b/.test(restSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "")));
-  ok("E3: o timer VISUAL continua o legado (ligá-lo ao domínio é a E5)",
-    html.includes("function startRestTimer(") && html.includes("state.restTimer.time") &&
-      html.includes('id="rest-overlay"') && !/WorkoutController\.restStart\(/.test(html));
+  ok("E5: o timer visual passou a ser medido pelo DOMÍNIO (fence da E3 atualizada)",
+    html.includes("function startRestTimer(") && html.includes('id="rest-overlay"') &&
+      html.includes("WorkoutController.restSnapshot(") && !/state\.restTimer\.time\b/.test(html));
 
   // Sprint 4 / E4 — tela acesa: adaptador isolado + intenção no ciclo do Player
   const wakeSrc = fs.readFileSync(path.join(ROOT, "js", "wake-lock.js"), "utf8");
@@ -1967,6 +2045,7 @@ function testWiring() {
   await testWakeLock();
   testWorkoutController();
   testWorkoutControllerRest();
+  testWorkoutPlayerE5();
   testWiring();
 
   console.log("\n==========================================");
