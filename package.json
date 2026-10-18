@@ -1,0 +1,14 @@
+{
+  "name": "treinotracker-deepseek",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TreinoTracker DeepSeek — app de treino (protótipo evolutivo, single-page)",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node tests/home-guard.test.js && node tests/modules.test.js && node tests/smoke.browser.mjs",
+    "test:home": "node tests/home-guard.test.js",
+    "test:unit": "node tests/modules.test.js",
+    "test:smoke": "node tests/smoke.browser.mjs",
+    "test:update": "node tests/home-guard.test.js --update"
+  }
+}

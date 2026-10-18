@@ -1,0 +1,32 @@
+# Dependências instaladas
+node_modules/
+package-lock.json
+yarn.lock
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporários e arquivos de SO
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.bak
+*.orig
+*.swp
+*~
+
+# Evidências de teste / capturas de tela (mantidas FORA do repositório)
+/evidence/
+/screenshots/
+/captures/
+
+# Configuração local sensível
+.env
+.env.*
+*.local
+secrets.json
+credentials.json

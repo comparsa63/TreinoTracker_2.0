@@ -1,0 +1,1475 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TreinoTracker</title>
+    <style>
+        /* ================= VARIÁVEIS E RESET ================= */
+        :root {
+            --bg-color: #0b0e14;
+            --card-bg: #151a24;
+            --card-hover: #1c2331;
+            --primary: #00ff55;
+            --primary-dark: #00cc44;
+            --danger: #ff4444;
+            --warning: #ffbb00;
+            --text-main: #ffffff;
+            --text-muted: #8b949e;
+            --border-radius: 16px;
+            --border-radius-sm: 12px;
+            --nav-height: 70px;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-family);
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        #app {
+            width: 100%;
+            max-width: 480px;
+            min-height: 100vh;
+            background-color: var(--bg-color);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            padding-bottom: var(--nav-height);
+        }
+
+        /* ================= COMPONENTES GERAIS ================= */
+        .screen {
+            display: none;
+            padding: 24px 20px;
+            animation: fadeIn 0.3s ease;
+            flex: 1;
+        }
+        .screen.active { display: block; }
+        .screen.no-padding { padding: 0; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h1, h2, h3, h4 { font-weight: 700; }
+        .text-muted { color: var(--text-muted); font-size: 0.9rem; }
+        
+        .btn {
+            background: var(--card-bg);
+            color: var(--text-main);
+            border: none;
+            padding: 16px;
+            border-radius: var(--border-radius-sm);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: background 0.2s, transform 0.1s;
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn-primary { background: var(--primary); color: #000; }
+        .btn-primary:active { background: var(--primary-dark); }
+        .btn-danger { background: rgba(255, 68, 68, 0.1); color: var(--danger); }
+        .btn-sm { padding: 8px 12px; font-size: 0.85rem; border-radius: 8px; }
+        .btn-icon { padding: 8px; width: 36px; height: 36px; border-radius: 50%; }
+
+        /* ================= NAVEGAÇÃO ================= */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            max-width: 480px;
+            height: var(--nav-height);
+            background: rgba(21, 26, 36, 0.95);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            z-index: 100;
+        }
+        .nav-item {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            padding: 8px 16px;
+            border-radius: 8px;
+        }
+        .nav-item.active { color: var(--primary); }
+        .nav-item svg { width: 24px; height: 24px; fill: currentColor; }
+
+        /* ================= HEADER PADRÃO ================= */
+        .header-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-top: 10px;
+        }
+        .header-nav h2 { font-size: 1.5rem; }
+        .header-title { font-size: 1.2rem; font-weight: 700; }
+
+        /* ================= TELA 1: INÍCIO ================= */
+        .logo { font-size: 1.5rem; font-weight: 800; letter-spacing: -1px; }
+        .logo span { color: var(--primary); }
+        .card-highlight {
+            background: linear-gradient(145deg, var(--card-bg), #0f131a);
+            border-radius: var(--border-radius);
+            padding: 24px;
+            border: 1px solid rgba(0, 255, 85, 0.1);
+            margin-bottom: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+        .card-highlight::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--primary);
+        }
+        .last-workout {
+            background: var(--card-bg); padding: 16px; border-radius: var(--border-radius-sm);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        /* ================= TELA 2: MEUS TREINOS ================= */
+        .routine-list { display: flex; flex-direction: column; gap: 12px; }
+        .routine-card {
+            background: var(--card-bg);
+            border-radius: var(--border-radius-sm);
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: border-color 0.2s;
+        }
+        .routine-card:active { border-color: var(--primary); }
+        .routine-letter {
+            width: 48px; height: 48px;
+            border-radius: 12px;
+            background: rgba(0, 255, 85, 0.1);
+            color: var(--primary);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem; font-weight: 800;
+        }
+        .routine-info { flex: 1; }
+        .routine-info h4 { font-size: 1.1rem; margin-bottom: 4px; }
+        .routine-info p { font-size: 0.8rem; color: var(--text-muted); }
+
+        /* ================= TELA 3/4: DETALHES E EDIÇÃO ================= */
+        .exercise-list-item {
+            background: var(--card-bg);
+            border-radius: var(--border-radius-sm);
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .exercise-list-item img {
+            width: 50px; height: 50px;
+            border-radius: 8px; object-fit: cover;
+        }
+        .exercise-list-item .info { flex: 1; }
+        .exercise-list-item .info h4 { font-size: 0.95rem; margin-bottom: 2px; }
+        .exercise-list-item .info p { font-size: 0.75rem; color: var(--text-muted); }
+        
+        /* Reordenar e Remover */
+        .edit-controls { display: flex; gap: 4px; align-items: center; }
+        .edit-btn {
+            background: rgba(255,255,255,0.05);
+            border: none; color: var(--text-main);
+            width: 32px; height: 32px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+        }
+        .edit-btn.delete { color: var(--danger); background: rgba(255, 68, 68, 0.1); }
+
+        /* ================= TELA 5: ADICIONAR EXERCÍCIOS ================= */
+        .search-bar {
+            width: 100%; background: var(--card-bg);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 14px 16px; border-radius: var(--border-radius-sm);
+            color: var(--text-main); font-size: 1rem;
+            margin-bottom: 16px; outline: none;
+        }
+        /* Todos os grupos em várias linhas: acessíveis por toque e mouse,
+           sem depender de rolagem horizontal (que escondia opções). */
+        .filters { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 16px; }
+        .filter-btn {
+            background: var(--card-bg); color: var(--text-muted); border: none;
+            padding: 8px 16px; border-radius: 20px; font-size: 0.85rem; white-space: nowrap; cursor: pointer;
+        }
+        .filter-btn.active { background: var(--primary); color: #000; font-weight: 600; }
+        .catalog-item {
+            background: var(--card-bg); border-radius: var(--border-radius-sm);
+            padding: 12px; display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
+        }
+        .catalog-item img { width: 50px; height: 50px; border-radius: 8px; object-fit: cover; }
+        .catalog-item .info { flex: 1; }
+        .catalog-item .info h4 { font-size: 0.95rem; }
+        .catalog-item .info p { font-size: 0.75rem; color: var(--text-muted); }
+        .btn-add-circle {
+            background: var(--primary); color: #000; border: none;
+            width: 36px; height: 36px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem; font-weight: 600; cursor: pointer;
+        }
+
+        /* ================= TELA 6: CONFIGURAR EXERCÍCIO ================= */
+        .config-form { display: flex; flex-direction: column; gap: 16px; }
+        .config-group {
+            background: var(--card-bg); padding: 16px; border-radius: var(--border-radius-sm);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .config-group label { font-weight: 600; color: var(--text-muted); }
+        .config-controls { display: flex; align-items: center; gap: 16px; }
+        .config-controls button {
+            background: rgba(255,255,255,0.05); border: none; color: var(--text-main);
+            width: 32px; height: 32px; border-radius: 8px; font-size: 1.2rem; cursor: pointer;
+        }
+        .config-controls span { font-size: 1.2rem; font-weight: 700; width: 40px; text-align: center; }
+
+        /* ================= TELA 8: PREPARAÇÃO ================= */
+        .prep-summary {
+            background: var(--card-bg); border-radius: var(--border-radius);
+            padding: 24px; text-align: center; margin-bottom: 24px;
+        }
+        .prep-stats { display: flex; justify-content: center; gap: 24px; margin: 16px 0; }
+        .prep-stat-box { background: rgba(255,255,255,0.05); padding: 12px 24px; border-radius: 12px; }
+        .prep-stat-box h3 { font-size: 1.5rem; color: var(--primary); }
+
+        /* ================= TELA 9: WORKOUT PLAYER ================= */
+        #screen-player { padding: 0; padding-bottom: 100px; background: #000; }
+        .player-header { padding: 24px 20px 16px; background: var(--bg-color); position: sticky; top: 0; z-index: 10; }
+        .player-top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .progress-container { width: 100%; height: 6px; background: var(--card-bg); border-radius: 3px; overflow: hidden; }
+        .progress-bar { height: 100%; background: var(--primary); width: 0%; border-radius: 3px; transition: width 0.3s; }
+        
+        .player-image { width: 100%; height: 220px; object-fit: cover; opacity: 0.8; }
+        .player-content { padding: 20px; background: var(--bg-color); border-radius: 24px 24px 0 0; margin-top: -24px; position: relative; z-index: 2; }
+        .player-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .player-title-row h2 { font-size: 1.6rem; }
+        .muscle-tag { background: rgba(0, 255, 85, 0.15); color: var(--primary); padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+
+        .sets-indicators { display: flex; gap: 12px; margin-bottom: 24px; }
+        .set-dot {
+            flex: 1; height: 48px; border-radius: var(--border-radius-sm); background: var(--card-bg);
+            display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--text-muted); font-size: 1.1rem;
+        }
+        .set-dot.completed { background: rgba(0, 255, 85, 0.1); color: var(--primary); }
+        .set-dot.current { background: var(--primary); color: #000; box-shadow: 0 0 15px rgba(0, 255, 85, 0.3); transform: scale(1.05); }
+
+        .controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+        .control-card { background: var(--card-bg); border-radius: var(--border-radius); padding: 16px; display: flex; flex-direction: column; align-items: center; }
+        .control-label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+        .control-target { font-size: 0.75rem; color: var(--primary); margin-bottom: 8px; }
+        .control-value { font-size: 2.5rem; font-weight: 800; line-height: 1; margin-bottom: 12px; display: flex; align-items: baseline; gap: 4px; }
+        .control-value span { font-size: 1rem; color: var(--text-muted); font-weight: 600; }
+        .control-actions { display: flex; gap: 16px; width: 100%; }
+        .btn-adjust { flex: 1; height: 48px; border-radius: 12px; background: rgba(255,255,255,0.05); border: none; color: var(--text-main); font-size: 1.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+        /* Toggle Switch (Descanso Automático) */
+        .auto-rest-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--card-bg);
+            padding: 12px 16px;
+            border-radius: var(--border-radius-sm);
+            margin-bottom: 12px;
+        }
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 51px;
+            height: 31px;
+        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #333;
+            transition: .4s;
+            border-radius: 31px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 27px; width: 27px;
+            left: 2px; bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: var(--primary); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        .player-nav-btns { display: flex; gap: 12px; margin-bottom: 24px; }
+        .player-nav-btns .btn { flex: 1; }
+
+        .fixed-action-btn {
+            position: fixed; bottom: 0; width: 100%; max-width: 480px;
+            padding: 16px 20px; background: linear-gradient(to top, var(--bg-color) 70%, transparent); z-index: 100;
+        }
+        .fixed-action-btn .btn { width: 100%; height: 60px; font-size: 1.1rem; box-shadow: 0 4px 20px rgba(0, 255, 85, 0.2); }
+
+        /* ================= OVERLAY DE DESCANSO ================= */
+        #rest-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(11, 14, 20, 0.95); backdrop-filter: blur(8px);
+            z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center;
+        }
+        #rest-overlay.active { display: flex; }
+        .rest-circle-container { position: relative; width: 280px; height: 280px; margin-bottom: 32px; }
+        .rest-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        .rest-svg circle { fill: none; stroke-width: 12; stroke-linecap: round; }
+        .rest-bg-circle { stroke: #1c2331; }
+        .rest-progress-circle { stroke: var(--primary); stroke-dasharray: 816; stroke-dashoffset: 0; transition: stroke-dashoffset 1s linear; }
+        .rest-time-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 4rem; font-weight: 800; letter-spacing: -2px; }
+        .rest-label { font-size: 1.2rem; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 2px; }
+
+        /* ================= MODAIS (SAÍDA) ================= */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); backdrop-filter: blur(4px);
+            z-index: 2000; display: none; align-items: center; justify-content: center; padding: 20px;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-content {
+            background: var(--card-bg); width: 100%; max-width: 400px;
+            border-radius: var(--border-radius); padding: 24px;
+            animation: fadeIn 0.3s ease;
+        }
+        .modal-content h3 { font-size: 1.3rem; margin-bottom: 12px; }
+        .modal-content p { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 24px; }
+        .modal-actions { display: flex; flex-direction: column; gap: 12px; }
+
+        /* ================= TELA 10: HISTÓRICO ================= */
+        .history-list { display: flex; flex-direction: column; gap: 12px; }
+        .history-card { background: var(--card-bg); padding: 16px; border-radius: var(--border-radius-sm); display: flex; justify-content: space-between; align-items: center; }
+        .history-info h4 { font-size: 1rem; margin-bottom: 4px; }
+        .history-info p { font-size: 0.8rem; color: var(--text-muted); }
+        .history-status { background: rgba(0, 255, 85, 0.1); color: var(--primary); padding: 4px 8px; border-radius: 8px; font-size: 0.75rem; font-weight: 600; }
+        .history-status.partial { background: rgba(255, 187, 0, 0.1); color: var(--warning); }
+
+        /* ===== FASE 2C — histórico enriquecido, PRs e ações de rotina =====
+           Classes NOVAS (não alteram a Home nem regras existentes). */
+        .routine-actions { display: flex; gap: 8px; align-items: center; }
+        .btn-minus { background: rgba(255, 68, 68, 0.1); color: var(--danger); font-weight: 700; }
+        .pr-summary { background: var(--card-bg); padding: 16px; border-radius: var(--border-radius-sm); margin-bottom: 16px; }
+        .pr-badge { display: inline-block; background: rgba(255, 214, 0, 0.12); color: #ffd600; padding: 2px 8px; border-radius: 8px; font-size: 0.7rem; font-weight: 700; margin-left: 8px; vertical-align: middle; }
+        .history-exercises { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; line-height: 1.5; }
+        .app-toast {
+            position: fixed; left: 50%; bottom: calc(var(--nav-height) + 20px);
+            transform: translateX(-50%) translateY(12px);
+            background: var(--card-bg); color: var(--text-main);
+            border: 1px solid rgba(0, 255, 85, 0.35);
+            border-radius: var(--border-radius-sm); padding: 12px 18px;
+            font-size: 0.9rem; font-weight: 600; max-width: 90%;
+            opacity: 0; pointer-events: none; z-index: 3000;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+        .app-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .app-toast.error { border-color: rgba(255, 68, 68, 0.5); color: var(--danger); }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    
+    <!-- ================= TELA 1: INÍCIO ================= -->
+    <section id="screen-home" class="screen active">
+        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+            <div class="logo">Treino<span>Tracker</span></div>
+            <button class="btn btn-sm" onclick="toggleLanguage()"><span id="lang-text">PT</span></button>
+        </header>
+        <div style="margin-bottom: 24px;">
+            <h2 data-i18n="greeting">Olá, Atleta</h2>
+            <p class="text-muted" data-i18n="greeting_sub">Pronto para o treino de hoje?</p>
+        </div>
+        <div class="card-highlight">
+            <h3 data-i18n="today_workout">Treino A — Peito e Tríceps</h3>
+            <div style="display: flex; gap: 16px; margin: 16px 0;">
+                <div><span class="text-muted" style="font-size: 0.8rem;" data-i18n="exercises">Exercícios</span><p style="font-weight: 700;">6</p></div>
+                <div><span class="text-muted" style="font-size: 0.8rem;" data-i18n="duration">Duração</span><p style="font-weight: 700;">45 min</p></div>
+            </div>
+            <button class="btn btn-primary" style="width: 100%;" onclick="navigate('workouts')" data-i18n="start_workout">INICIAR TREINO</button>
+        </div>
+        <div style="margin-top: 32px;">
+            <h4 style="margin-bottom: 12px; font-size: 1rem;" data-i18n="last_workout">Último Treino</h4>
+            <div class="last-workout">
+                <div><h4 style="font-size: 1rem;">Treino B — Costas e Bíceps</h4><p class="text-muted" style="font-size: 0.8rem;">Ontem • 50 min</p></div>
+                <div class="history-status" data-i18n="completed">Concluído</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================= TELA 2: MEUS TREINOS ================= -->
+    <section id="screen-workouts" class="screen">
+        <div class="header-nav">
+            <h2 data-i18n="my_workouts">Meus treinos</h2>
+            <button class="btn btn-icon btn-primary" onclick="createNewRoutine()">+</button>
+        </div>
+        <p class="text-muted" style="margin-bottom: 16px;" data-i18n="my_workouts_sub">Suas rotinas personalizadas</p>
+        <div class="routine-list" id="routines-container">
+            <!-- Preenchido via JS -->
+        </div>
+    </section>
+
+    <!-- ================= TELA 3: DETALHES DA ROTINA ================= -->
+    <section id="screen-details" class="screen">
+        <div class="header-nav">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <button class="btn btn-icon" onclick="navigate('workouts')">←</button>
+                <h2 id="details-title">Treino A</h2>
+            </div>
+            <button class="btn btn-sm" onclick="navigate('edit', state.editingRoutineId)" data-i18n="edit">Editar</button>
+        </div>
+        <div id="details-exercises-container"></div>
+        <div style="margin-top: 24px;">
+            <button class="btn btn-primary" style="width: 100%;" onclick="navigate('prep')" data-i18n="start_this_workout">INICIAR ESTE TREINO</button>
+        </div>
+    </section>
+
+    <!-- ================= TELA 4: EDITAR ROTINA ================= -->
+    <section id="screen-edit" class="screen">
+        <div class="header-nav">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <button class="btn btn-icon" onclick="navigate('details')">←</button>
+                <h2 id="edit-title">Editar Treino A</h2>
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="saveRoutineEdits()" data-i18n="save">Salvar</button>
+        </div>
+        <div id="edit-exercises-container"></div>
+        <div style="margin-top: 16px;">
+            <button class="btn" style="width: 100%; border: 1px dashed var(--text-muted); background: transparent;" onclick="navigate('add-exercise')">
+                + <span data-i18n="add_exercise">Adicionar exercício</span>
+            </button>
+        </div>
+    </section>
+
+    <!-- ================= TELA 5: ADICIONAR EXERCÍCIOS ================= -->
+    <section id="screen-add-exercise" class="screen">
+        <div class="header-nav">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <button class="btn btn-icon" onclick="navigate('edit')">←</button>
+                <h2 data-i18n="add_exercise_title">Adicionar exercícios</h2>
+            </div>
+        </div>
+        <input type="text" class="search-bar" placeholder="Buscar exercício..." data-i18n="search_placeholder" id="search-catalog">
+        <div class="filters" id="catalog-filters"></div>
+        <div id="catalog-container"></div>
+    </section>
+
+    <!-- ================= TELA 6: CONFIGURAR EXERCÍCIO ================= -->
+    <section id="screen-config-exercise" class="screen">
+        <div class="header-nav">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <button class="btn btn-icon" onclick="navigate('edit')">←</button>
+                <h2 data-i18n="configure_exercise">Configurar exercício</h2>
+            </div>
+        </div>
+        <div style="text-align: center; margin-bottom: 24px;">
+            <img id="config-img" src="" style="width: 100px; height: 100px; border-radius: 16px; object-fit: cover; margin-bottom: 12px;">
+            <h3 id="config-name">Supino Reto</h3>
+            <p class="text-muted" id="config-muscle">Peito</p>
+        </div>
+        
+        <div class="config-form">
+            <div class="config-group">
+                <label data-i18n="sets">Séries</label>
+                <div class="config-controls">
+                    <button onclick="updateConfig('sets', -1)">−</button>
+                    <span id="config-sets">4</span>
+                    <button onclick="updateConfig('sets', 1)">+</button>
+                </div>
+            </div>
+            <div class="config-group">
+                <label data-i18n="reps">Repetições</label>
+                <div class="config-controls">
+                    <button onclick="updateConfig('reps', -1)">−</button>
+                    <span id="config-reps">12</span>
+                    <button onclick="updateConfig('reps', 1)">+</button>
+                </div>
+            </div>
+            <div class="config-group">
+                <label data-i18n="load_kg">Carga prevista (kg)</label>
+                <div class="config-controls">
+                    <button onclick="updateConfig('weight', -5)">−</button>
+                    <span id="config-weight">60</span>
+                    <button onclick="updateConfig('weight', 5)">+</button>
+                </div>
+            </div>
+            <div class="config-group">
+                <label data-i18n="rest_sec">Descanso (segundos)</label>
+                <div class="config-controls">
+                    <button onclick="updateConfig('rest', -15)">−</button>
+                    <span id="config-rest">60</span>
+                    <button onclick="updateConfig('rest', 15)">+</button>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 32px;">
+            <button class="btn btn-primary" style="width: 100%;" onclick="saveExerciseConfig()" data-i18n="save_config">Salvar configuração</button>
+        </div>
+    </section>
+
+    <!-- ================= TELA 8: PREPARAÇÃO DO TREINO ================= -->
+    <section id="screen-prep" class="screen">
+        <div class="header-nav">
+            <button class="btn btn-icon" onclick="navigate('details')">←</button>
+            <h2 data-i18n="workout_prep">Iniciar treino</h2>
+            <div style="width: 36px;"></div>
+        </div>
+        
+        <div class="prep-summary">
+            <h2 id="prep-routine-name" style="color: var(--primary); margin-bottom: 8px;">Treino A</h2>
+            <p class="text-muted" id="prep-routine-muscle">Peito e tríceps</p>
+            
+            <div class="prep-stats">
+                <div class="prep-stat-box">
+                    <h3 id="prep-total-exercises">6</h3>
+                    <span class="text-muted" style="font-size: 0.8rem;" data-i18n="exercises">Exercícios</span>
+                </div>
+                <div class="prep-stat-box">
+                    <h3 id="prep-total-sets">20</h3>
+                    <span class="text-muted" style="font-size: 0.8rem;" data-i18n="total_sets">Séries totais</span>
+                </div>
+            </div>
+        </div>
+
+        <h4 style="margin-bottom: 12px;" data-i18n="workout_exercises">Exercícios do treino</h4>
+        <div id="prep-exercises-container"></div>
+
+        <div style="margin-top: 24px;">
+            <button class="btn btn-primary" style="width: 100%;" onclick="startWorkoutSession()" data-i18n="start_workout">COMECAR TREINO</button>
+        </div>
+    </section>
+
+    <!-- ================= TELA 9: WORKOUT PLAYER ================= -->
+    <section id="screen-player" class="screen no-padding">
+        <div class="player-header">
+            <div class="player-top-bar">
+                <div>
+                    <div class="header-title" id="player-routine-name">Treino A</div>
+                    <div class="text-muted" style="font-size: 0.8rem;" id="player-progress-text">Exercício 1 de 6</div>
+                </div>
+                <button class="btn btn-icon" onclick="showExitModal()">✕</button>
+            </div>
+            <div class="progress-container">
+                <div class="progress-bar" id="player-progress-bar"></div>
+            </div>
+        </div>
+
+        <img id="player-image" class="player-image" src="" alt="Exercício">
+        
+        <div class="player-content">
+            <div class="player-title-row">
+                <h2 id="player-exercise-name">Supino Reto</h2>
+                <div class="muscle-tag" id="player-exercise-muscle">Peito</div>
+            </div>
+
+            <div class="sets-indicators" id="player-sets-container"></div>
+
+            <div class="controls-grid">
+                <div class="control-card">
+                    <span class="control-label" data-i18n="load">Carga</span>
+                    <span class="control-target" id="player-target-weight">Meta: 60 kg</span>
+                    <div class="control-value"><span id="player-actual-weight">60</span><span>kg</span></div>
+                    <div class="control-actions">
+                        <button class="btn-adjust" onclick="adjustActual('weight', -5)">−</button>
+                        <button class="btn-adjust" onclick="adjustActual('weight', 5)">+</button>
+                    </div>
+                </div>
+                <div class="control-card">
+                    <span class="control-label" data-i18n="reps">Reps</span>
+                    <span class="control-target" id="player-target-reps">Meta: 12</span>
+                    <div class="control-value"><span id="player-actual-reps">12</span></div>
+                    <div class="control-actions">
+                        <button class="btn-adjust" onclick="adjustActual('reps', -1)">−</button>
+                        <button class="btn-adjust" onclick="adjustActual('reps', 1)">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TOGGLE DESCANSO AUTOMÁTICO -->
+            <div class="auto-rest-row">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    <span style="font-size: 0.9rem; font-weight: 600;" data-i18n="auto_rest">Descanso Automático</span>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="toggle-auto-rest" checked onchange="toggleAutoRest()">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 16px; border-radius: var(--border-radius-sm); margin-bottom: 16px;">
+                <span style="font-weight: 600;" id="player-set-info">Série 1 de 4</span>
+                <div style="display: flex; align-items: center; gap: 8px; color: var(--primary); font-weight: 600; font-size: 0.9rem;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    <span id="player-rest-time">Descanso: 60s</span>
+                </div>
+            </div>
+
+            <div class="player-nav-btns">
+                <button class="btn" onclick="prevExercise()" id="btn-prev-ex">← <span data-i18n="prev">Anterior</span></button>
+                <button class="btn" onclick="nextExercise()" id="btn-next-ex"><span data-i18n="next">Próximo</span> →</button>
+            </div>
+        </div>
+
+        <div class="fixed-action-btn">
+            <button class="btn btn-primary" id="btn-complete-set" onclick="completeSet()">
+                <span data-i18n="complete_set">✓ CONCLUIR SÉRIE</span>
+            </button>
+        </div>
+    </section>
+
+    <!-- ================= TELA 10: HISTÓRICO ================= -->
+    <section id="screen-history" class="screen">
+        <div class="header-nav">
+            <h2 data-i18n="history_title">Histórico</h2>
+        </div>
+        <div id="pr-summary" class="pr-summary">
+            <!-- Preenchido via JS (Fase 2C) -->
+        </div>
+        <div class="history-list" id="history-container">
+            <!-- Preenchido via JS -->
+        </div>
+    </section>
+
+    <!-- OVERLAY DE DESCANSO -->
+    <div id="rest-overlay">
+        <div class="rest-label" data-i18n="rest_label">Descanso</div>
+        <div class="rest-circle-container">
+            <svg class="rest-svg" viewBox="0 0 280 280">
+                <circle class="rest-bg-circle" cx="140" cy="140" r="130"></circle>
+                <circle class="rest-progress-circle" id="rest-progress-bar" cx="140" cy="140" r="130"></circle>
+            </svg>
+            <div class="rest-time-text" id="rest-timer-display">01:00</div>
+        </div>
+        <button class="btn btn-primary" style="width: 100%; max-width: 300px; margin-bottom: 12px;" onclick="adjustRestTime(-15)">- 15s</button>
+        <button class="btn btn-primary" style="width: 100%; max-width: 300px; margin-bottom: 12px;" onclick="adjustRestTime(15)">+ 15s</button>
+        <button class="btn" style="background: transparent; color: var(--primary); font-weight: 700;" onclick="skipRest()" data-i18n="skip_rest">Pular Descanso ➔</button>
+    </div>
+
+    <!-- MODAL DE SAÍDA -->
+    <div class="modal-overlay" id="exit-modal">
+        <div class="modal-content">
+            <h3 data-i18n="exit_title">Sair do treino?</h3>
+            <p data-i18n="exit_desc">Você ainda tem exercícios/séries pendentes. O que deseja fazer?</p>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="closeExitModal()" data-i18n="continue_workout">Continuar treinando</button>
+                <button class="btn" onclick="saveAndExit()" data-i18n="save_exit">Salvar o que foi concluído e sair</button>
+                <button class="btn btn-danger" onclick="discardAndExit()" data-i18n="discard_exit">Sair e descartar o treino</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE CONFIRMAÇÃO (genérico — Fase 2C) -->
+    <div class="modal-overlay" id="confirm-modal">
+        <div class="modal-content">
+            <h3 id="confirm-title">Confirmar</h3>
+            <p id="confirm-desc"></p>
+            <div class="modal-actions">
+                <button class="btn btn-primary" id="confirm-ok">Confirmar</button>
+                <button class="btn" id="confirm-cancel">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST (feedback visual — Fase 2C) -->
+    <div id="app-toast" class="app-toast" role="status" aria-live="polite"></div>
+
+    <!-- NAVEGAÇÃO INFERIOR -->
+    <nav class="bottom-nav" id="main-nav">
+        <a class="nav-item active" onclick="navigate('home')">
+            <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+            <span data-i18n="nav_home">Início</span>
+        </a>
+        <a class="nav-item" onclick="navigate('workouts')">
+            <svg viewBox="0 0 24 24"><path d="M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 2.71 2.71 4.14l1.43 1.43L2 7.71l1.43 1.43L2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22l1.43-1.43L16.29 22l2.14-2.14 1.43 1.43 1.43-1.43-1.43-1.43L22 16.29z"/></svg>
+            <span data-i18n="nav_workout">Treino</span>
+        </a>
+        <a class="nav-item" onclick="navigate('history')">
+            <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+            <span data-i18n="nav_history">Histórico</span>
+        </a>
+    </nav>
+
+</div>
+
+<!-- ================= MÓDULOS DA APP (carregam antes do script principal) ================= -->
+<script src="js/utils.js"></script>
+<script src="services/storage.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/data/exercises.js"></script>
+<script src="js/catalog.js"></script>
+<script src="js/events.js"></script>
+<script src="js/routine-actions.js"></script>
+<script src="js/pr.js"></script>
+
+<script>
+    // ================= CATÁLOGO REAL (Fase 2B) =================
+    // Dados em js/data/exercises.js, adaptados por js/catalog.js.
+    // Substitui o mock (hotlink do Unsplash) por exercícios reais e imagens locais.
+    const mockCatalog = (typeof Catalog !== 'undefined')
+        ? Catalog.forPrototype()
+        : [{ id: 'ex1', name: 'Supino reto', muscle: 'Peito', img: 'assets/images/peito.jpg' }];
+
+    // Item de reserva: garante que rotinas antigas (ids inexistentes) não quebrem a UI.
+    const FALLBACK_CATALOG_ITEM = {
+        id: '_missing',
+        name: 'Exercício removido',
+        en: '',
+        muscle: '',
+        equipment: '',
+        img: (typeof Catalog !== 'undefined' ? Catalog.FALLBACK_IMAGE : 'assets/images/quadriceps.jpg')
+    };
+
+    function catalogItem(id) {
+        return mockCatalog.find(c => c.id === id) || FALLBACK_CATALOG_ITEM;
+    }
+
+    const initialRoutines = [
+        { id: 'rA', letter: 'A', name: 'Peito e tríceps', exercises: [
+            { catalogId: 'C-02', sets: 4, reps: 12, weight: 60, rest: 60 },
+            { catalogId: 'C-01', sets: 3, reps: 10, weight: 40, rest: 60 },
+            { catalogId: 'B-04', sets: 3, reps: 15, weight: 20, rest: 45 }
+        ]},
+        { id: 'rB', letter: 'B', name: 'Costas e bíceps', exercises: [
+            { catalogId: 'D-01', sets: 4, reps: 10, weight: 50, rest: 60 },
+            { catalogId: 'D-05', sets: 3, reps: 12, weight: 30, rest: 60 },
+            { catalogId: 'A-01', sets: 3, reps: 12, weight: 15, rest: 45 }
+        ]},
+        { id: 'rC', letter: 'C', name: 'Pernas', exercises: [
+            { catalogId: 'G-01', sets: 4, reps: 10, weight: 80, rest: 90 }
+        ]}
+    ];
+
+    // ================= ESTADO DA APLICAÇÃO =================
+    let state = {
+        lang: 'pt',
+        currentScreen: 'home',
+        routines: JSON.parse(JSON.stringify(initialRoutines)),
+        editingRoutineId: null,
+        tempEditRoutine: null,
+        configExerciseIndex: null,
+        catalogFilter: 'all',
+        history: [
+            { id: 1, name: 'Treino B — Costas e Bíceps', date: 'Ontem, 18:30', duration: '50 min', status: 'completed' },
+            { id: 2, name: 'Treino A — Peito e Tríceps', date: 'Segunda, 07:00', duration: '45 min', status: 'completed' }
+        ],
+        session: null,
+        autoRestEnabled: true, // Controla o toggle de descanso
+        restTimer: { id: null, time: 0, total: 0, isRunning: false }
+    };
+
+    // ================= DICIONÁRIO DE TRADUÇÕES =================
+    // Movido para js/i18n.js (fonte única: pt/en/es). Mantemos aqui a mesma
+    // referência `translations[locale][key]` para não alterar nenhum consumidor.
+    const translations = I18n.dict;
+
+    // ================= FUNÇÕES CORE E NAVEGAÇÃO =================
+    
+    function navigate(screenId, param = null) {
+        state.currentScreen = screenId;
+        
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(`screen-${screenId}`).classList.add('active');
+        
+        document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+        const navMap = { 'home': 0, 'workouts': 1, 'details': 1, 'edit': 1, 'add-exercise': 1, 'config-exercise': 1, 'prep': 1, 'history': 2 };
+        if (navMap[screenId] !== undefined) {
+            document.querySelectorAll('.nav-item')[navMap[screenId]].classList.add('active');
+        }
+
+        document.getElementById('main-nav').style.display = (screenId === 'player') ? 'none' : 'flex';
+        window.scrollTo(0, 0);
+
+        if (screenId === 'workouts') renderRoutines();
+        if (screenId === 'details') renderDetails(param || state.editingRoutineId);
+        if (screenId === 'edit') startEditRoutine(param || state.editingRoutineId);
+        if (screenId === 'add-exercise') renderCatalog();
+        if (screenId === 'config-exercise') renderConfigExercise(param);
+        if (screenId === 'prep') renderPrep();
+        if (screenId === 'history') renderHistory();
+        if (screenId === 'player') {
+            // Sincroniza o toggle visual ao entrar no player
+            document.getElementById('toggle-auto-rest').checked = state.autoRestEnabled;
+        }
+    }
+
+    function toggleLanguage() {
+        I18n.toggle(); // pt <-> en: troca, aplica nos [data-i18n] e persiste a escolha
+        navigate(state.currentScreen);
+    }
+
+    // ================= LÓGICA: ROTINAS E EDIÇÃO =================
+
+    function renderRoutines() {
+        const container = document.getElementById('routines-container');
+        container.innerHTML = state.routines.map(r => `
+            <div class="routine-card" onclick="navigate('details', '${r.id}')">
+                <div class="routine-letter">${r.letter}</div>
+                <div class="routine-info">
+                    <h4>${r.name}</h4>
+                    <p>${r.exercises.length} exercícios</p>
+                </div>
+                <div class="routine-actions">
+                    <button class="btn btn-sm" title="Editar treino" onclick="event.stopPropagation(); navigate('edit', '${r.id}')">✎</button>
+                    <button class="btn btn-sm btn-minus" title="Excluir treino" onclick="event.stopPropagation(); askDeleteRoutine('${r.id}')">−</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function createNewRoutine() {
+        const nextLetter = String.fromCharCode(65 + state.routines.length);
+        const newId = 'r' + nextLetter;
+        state.routines.push({
+            id: newId, letter: nextLetter, name: 'Novo treino', exercises: []
+        });
+        Persistence.saveRoutines(state.routines);
+        navigate('edit', newId);
+    }
+
+    function renderDetails(routineId) {
+        state.editingRoutineId = routineId;
+        const r = state.routines.find(x => x.id === routineId);
+        document.getElementById('details-title').innerText = `Treino ${r.letter}`;
+        
+        const container = document.getElementById('details-exercises-container');
+        if (r.exercises.length === 0) {
+            container.innerHTML = '<p class="text-muted" style="text-align:center; margin-top:20px;">Nenhum exercício adicionado.</p>';
+            return;
+        }
+
+        container.innerHTML = r.exercises.map((ex, idx) => {
+            const cat = catalogItem(ex.catalogId);
+            return `
+                <div class="exercise-list-item">
+                    <div style="font-weight: 700; color: var(--text-muted); width: 20px;">${idx + 1}</div>
+                    <img src="${cat.img}">
+                    <div class="info">
+                        <h4>${cat.name}</h4>
+                        <p>${ex.sets} séries • ${ex.reps} reps • ${ex.weight} kg</p>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function startEditRoutine(routineId) {
+        state.editingRoutineId = routineId;
+        const r = state.routines.find(x => x.id === routineId);
+        state.tempEditRoutine = JSON.parse(JSON.stringify(r));
+        document.getElementById('edit-title').innerText = `Editar Treino ${r.letter}`;
+        renderEditList();
+    }
+
+    function renderEditList() {
+        const r = state.tempEditRoutine;
+        const container = document.getElementById('edit-exercises-container');
+        
+        if (r.exercises.length === 0) {
+            container.innerHTML = '<p class="text-muted" style="text-align:center; margin-top:20px;">Nenhum exercício adicionado.</p>';
+            return;
+        }
+
+        container.innerHTML = r.exercises.map((ex, idx) => {
+            const cat = catalogItem(ex.catalogId);
+            return `
+                <div class="exercise-list-item">
+                    <img src="${cat.img}">
+                    <div class="info" onclick="navigate('config-exercise', ${idx})">
+                        <h4>${cat.name}</h4>
+                        <p>${ex.sets} séries • ${ex.reps} reps • ${ex.weight} kg</p>
+                    </div>
+                    <div class="edit-controls">
+                        <button class="edit-btn" onclick="moveExercise(${idx}, -1)">↑</button>
+                        <button class="edit-btn" onclick="moveExercise(${idx}, 1)">↓</button>
+                        <button class="edit-btn delete" onclick="removeExercise(${idx})">✕</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function moveExercise(index, direction) {
+        const arr = state.tempEditRoutine.exercises;
+        if (index + direction < 0 || index + direction >= arr.length) return;
+        const temp = arr[index];
+        arr[index] = arr[index + direction];
+        arr[index + direction] = temp;
+        renderEditList();
+    }
+
+    function removeExercise(index) {
+        state.tempEditRoutine.exercises.splice(index, 1);
+        renderEditList();
+    }
+
+    function saveRoutineEdits() {
+        const index = state.routines.findIndex(r => r.id === state.editingRoutineId);
+        state.routines[index] = JSON.parse(JSON.stringify(state.tempEditRoutine));
+        Persistence.saveRoutines(state.routines);
+        navigate('details', state.editingRoutineId);
+    }
+
+    function renderCatalogFilters() {
+        const container = document.getElementById('catalog-filters');
+        if (!container) return;
+        const groups = (typeof Catalog !== 'undefined') ? Catalog.groups() : [];
+        const chips = ['all'].concat(groups);
+        container.innerHTML = chips.map(g => `
+            <button class="filter-btn ${state.catalogFilter === g ? 'active' : ''}" onclick="filterCatalog('${g}')">
+                ${g === 'all' ? translations[state.lang].all : g}
+            </button>
+        `).join('');
+    }
+
+    function renderCatalog() {
+        renderCatalogFilters();
+        const container = document.getElementById('catalog-container');
+        const query = document.getElementById('search-catalog').value || '';
+
+        const filtered = (typeof Catalog !== 'undefined')
+            ? Catalog.search(query, state.catalogFilter)
+            : mockCatalog.filter(c => {
+                const matchQuery = c.name.toLowerCase().includes(query.toLowerCase());
+                const matchFilter = state.catalogFilter === 'all' || c.muscle === state.catalogFilter;
+                return matchQuery && matchFilter;
+            });
+
+        container.innerHTML = filtered.map(c => `
+            <div class="catalog-item">
+                <img src="${c.img}">
+                <div class="info"><h4>${c.name}</h4><p>${c.muscle}</p></div>
+                <button class="btn-add-circle" onclick="addExerciseToRoutine('${c.id}')">+</button>
+            </div>
+        `).join('');
+    }
+
+    function filterCatalog(muscle) {
+        state.catalogFilter = muscle;
+        renderCatalog();
+    }
+
+    function addExerciseToRoutine(catalogId) {
+        state.tempEditRoutine.exercises.push({
+            catalogId: catalogId, sets: 3, reps: 10, weight: 20, rest: 60
+        });
+        navigate('edit');
+    }
+
+    function renderConfigExercise(index) {
+        state.configExerciseIndex = index;
+        const ex = state.tempEditRoutine.exercises[index];
+        const cat = catalogItem(ex.catalogId);
+        
+        document.getElementById('config-img').src = cat.img;
+        document.getElementById('config-name').innerText = cat.name;
+        document.getElementById('config-muscle').innerText = cat.muscle;
+        
+        document.getElementById('config-sets').innerText = ex.sets;
+        document.getElementById('config-reps').innerText = ex.reps;
+        document.getElementById('config-weight').innerText = ex.weight;
+        document.getElementById('config-rest').innerText = ex.rest;
+    }
+
+    function updateConfig(field, amount) {
+        const ex = state.tempEditRoutine.exercises[state.configExerciseIndex];
+        ex[field] = Math.max(1, ex[field] + amount);
+        
+        const map = { sets: 'config-sets', reps: 'config-reps', weight: 'config-weight', rest: 'config-rest' };
+        document.getElementById(map[field]).innerText = ex[field];
+    }
+
+    function saveExerciseConfig() {
+        navigate('edit');
+    }
+
+    // ================= LÓGICA: PREPARAÇÃO E PLAYER =================
+
+    function renderPrep() {
+        const r = state.routines.find(x => x.id === state.editingRoutineId);
+        document.getElementById('prep-routine-name').innerText = `Treino ${r.letter}`;
+        document.getElementById('prep-routine-muscle').innerText = r.name;
+        
+        const totalSets = r.exercises.reduce((acc, ex) => acc + ex.sets, 0);
+        document.getElementById('prep-total-exercises').innerText = r.exercises.length;
+        document.getElementById('prep-total-sets').innerText = totalSets;
+
+        document.getElementById('prep-exercises-container').innerHTML = r.exercises.map((ex, idx) => {
+            const cat = catalogItem(ex.catalogId);
+            return `<div class="exercise-list-item" style="padding: 8px;">
+                <div style="font-weight:700; color:var(--text-muted); width:20px;">${idx+1}</div>
+                <div class="info"><h4>${cat.name}</h4><p>${ex.sets}x${ex.reps} • ${ex.weight}kg</p></div>
+            </div>`;
+        }).join('');
+    }
+
+    function startWorkoutSession() {
+        const routine = state.routines.find(x => x.id === state.editingRoutineId);
+        
+        state.session = {
+            routineId: routine.id,
+            routineName: routine.name,
+            letter: routine.letter,
+            currentExerciseIndex: 0,
+            currentSetIndex: 1,
+            exercises: routine.exercises.map(ex => {
+                const cat = catalogItem(ex.catalogId);
+                return {
+                    ...ex,
+                    name: cat.name, muscle: cat.muscle, img: cat.img,
+                    actualWeight: ex.weight,
+                    actualReps: ex.reps,
+                    setsCompleted: 0,
+                    completedSets: []
+                };
+            }),
+            isFinished: false,
+            startedAt: new Date()
+        };
+
+        // Reseta o toggle para ligado ao iniciar um novo treino (opcional, mas boa prática)
+        state.autoRestEnabled = true;
+        document.getElementById('toggle-auto-rest').checked = true;
+
+        navigate('player');
+        updatePlayerUI();
+    }
+
+    // FUNÇÃO DO TOGGLE
+    function toggleAutoRest() {
+        state.autoRestEnabled = document.getElementById('toggle-auto-rest').checked;
+        Persistence.saveAutoRest(state.autoRestEnabled);
+    }
+
+    function updatePlayerUI() {
+        if (!state.session) return;
+        const s = state.session;
+        const ex = s.exercises[s.currentExerciseIndex];
+        
+        document.getElementById('player-routine-name').innerText = `Treino ${s.letter}`;
+        document.getElementById('player-progress-text').innerText = `Exercício ${s.currentExerciseIndex + 1} de ${s.exercises.length}`;
+        
+        const totalEx = s.exercises.length;
+        const progressPercent = (s.currentExerciseIndex / totalEx) * 100;
+        document.getElementById('player-progress-bar').style.width = `${progressPercent}%`;
+
+        document.getElementById('player-image').src = ex.img;
+        document.getElementById('player-exercise-name').innerText = ex.name;
+        document.getElementById('player-exercise-muscle').innerText = ex.muscle;
+
+        const setsContainer = document.getElementById('player-sets-container');
+        setsContainer.innerHTML = '';
+        for (let i = 1; i <= ex.sets; i++) {
+            const dot = document.createElement('div');
+            dot.className = 'set-dot';
+            dot.innerText = i;
+            if (i <= ex.setsCompleted) {
+                dot.classList.add('completed'); dot.innerHTML = '✓';
+            } else if (i === s.currentSetIndex) {
+                dot.classList.add('current');
+            }
+            setsContainer.appendChild(dot);
+        }
+
+        document.getElementById('player-target-weight').innerText = `Meta: ${ex.weight} kg`;
+        document.getElementById('player-target-reps').innerText = `Meta: ${ex.reps}`;
+        document.getElementById('player-actual-weight').innerText = ex.actualWeight;
+        document.getElementById('player-actual-reps').innerText = ex.actualReps;
+        
+        document.getElementById('player-set-info').innerText = `Série ${s.currentSetIndex} de ${ex.sets}`;
+        document.getElementById('player-rest-time').innerText = `Descanso: ${ex.rest}s`;
+
+        document.getElementById('btn-prev-ex').style.opacity = s.currentExerciseIndex === 0 ? '0.5' : '1';
+        document.getElementById('btn-next-ex').style.opacity = s.currentExerciseIndex === s.exercises.length - 1 ? '0.5' : '1';
+
+        if (s.isFinished) {
+            document.getElementById('btn-complete-set').innerHTML = `<span data-i18n="finish_workout">FINALIZAR TREINO</span>`;
+        } else {
+            document.getElementById('btn-complete-set').innerHTML = `<span data-i18n="complete_set">✓ CONCLUIR SÉRIE</span>`;
+        }
+        
+        document.querySelectorAll('#screen-player [data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (translations[state.lang][key]) el.innerText = translations[state.lang][key];
+        });
+    }
+
+    function adjustActual(field, amount) {
+        if (!state.session) return;
+        const ex = state.session.exercises[state.session.currentExerciseIndex];
+        if (field === 'weight') ex.actualWeight = Math.max(0, ex.actualWeight + amount);
+        if (field === 'reps') ex.actualReps = Math.max(1, ex.actualReps + amount);
+        updatePlayerUI();
+    }
+
+    function completeSet() {
+        const s = state.session;
+        if (s.isFinished) {
+            saveSessionToHistory('completed');
+            state.session = null;
+            navigate('home');
+            return;
+        }
+
+        const ex = s.exercises[s.currentExerciseIndex];
+
+        // Registra a série EFETIVAMENTE concluída (carga/reps reais do momento).
+        // Séries pendentes nunca contam como concluídas (Fase 2C).
+        if (!Array.isArray(ex.completedSets)) ex.completedSets = [];
+        ex.completedSets.push({ weight: ex.actualWeight, reps: ex.actualReps });
+
+        ex.setsCompleted++;
+        s.currentSetIndex++;
+
+        if (s.currentSetIndex > ex.sets) {
+            if (s.currentExerciseIndex < s.exercises.length - 1) {
+                s.currentExerciseIndex++;
+                s.currentSetIndex = 1;
+                updatePlayerUI();
+                return;
+            } else {
+                s.isFinished = true;
+                updatePlayerUI();
+                return;
+            }
+        }
+
+        updatePlayerUI();
+        
+        // VERIFICA SE O DESCANSO AUTOMÁTICO ESTÁ LIGADO ANTES DE INICIAR O TIMER
+        if (state.autoRestEnabled) {
+            startRestTimer(ex.rest);
+        }
+    }
+
+    function prevExercise() {
+        if (state.session.currentExerciseIndex > 0) {
+            state.session.currentExerciseIndex--;
+            state.session.currentSetIndex = state.session.exercises[state.session.currentExerciseIndex].setsCompleted + 1;
+            updatePlayerUI();
+        }
+    }
+
+    function nextExercise() {
+        if (state.session.currentExerciseIndex < state.session.exercises.length - 1) {
+            state.session.currentExerciseIndex++;
+            state.session.currentSetIndex = state.session.exercises[state.session.currentExerciseIndex].setsCompleted + 1;
+            updatePlayerUI();
+        }
+    }
+
+    // ================= LÓGICA: DESCANSO =================
+
+    function startRestTimer(seconds) {
+        state.restTimer.time = seconds;
+        state.restTimer.total = seconds;
+        state.restTimer.isRunning = true;
+        
+        document.getElementById('rest-overlay').classList.add('active');
+        updateRestUI();
+
+        if (state.restTimer.id) clearInterval(state.restTimer.id);
+        state.restTimer.id = setInterval(() => {
+            state.restTimer.time--;
+            if (state.restTimer.time <= 0) {
+                skipRest();
+            } else {
+                updateRestUI();
+            }
+        }, 1000);
+    }
+
+    function updateRestUI() {
+        const t = state.restTimer.time;
+        const total = state.restTimer.total;
+        const mins = Math.floor(t / 60).toString().padStart(2, '0');
+        const secs = (t % 60).toString().padStart(2, '0');
+        document.getElementById('rest-timer-display').innerText = `${mins}:${secs}`;
+        
+        const circumference = 2 * Math.PI * 130;
+        const offset = circumference - (t / total) * circumference;
+        document.getElementById('rest-progress-bar').style.strokeDashoffset = offset;
+    }
+
+    function adjustRestTime(amount) {
+        if (!state.restTimer.isRunning) return;
+        state.restTimer.time = Math.max(0, state.restTimer.time + amount);
+        state.restTimer.total = Math.max(state.restTimer.total, state.restTimer.time);
+        updateRestUI();
+    }
+
+    function skipRest() {
+        clearInterval(state.restTimer.id);
+        state.restTimer.isRunning = false;
+        document.getElementById('rest-overlay').classList.remove('active');
+    }
+
+    // ================= LÓGICA: SAÍDA E HISTÓRICO =================
+
+    function showExitModal() {
+        document.getElementById('exit-modal').classList.add('active');
+    }
+    function closeExitModal() {
+        document.getElementById('exit-modal').classList.remove('active');
+    }
+
+    function saveAndExit() {
+        saveSessionToHistory('partial');
+        state.session = null;
+        closeExitModal();
+        navigate('home');
+    }
+
+    function discardAndExit() {
+        state.session = null;
+        closeExitModal();
+        navigate('home');
+    }
+
+    function saveSessionToHistory(status) {
+        const s = state.session;
+        if (!s || !Array.isArray(s.exercises)) return;
+
+        // Só as séries EFETIVAMENTE concluídas entram no histórico (Fase 2C).
+        const exercises = s.exercises.map(ex => ({
+            catalogId: ex.catalogId || null,
+            name: ex.name || '',
+            muscle: ex.muscle || '',
+            sets: (Array.isArray(ex.completedSets) ? ex.completedSets : [])
+                .map(st => ({ weight: Number(st.weight) || 0, reps: Number(st.reps) || 0 }))
+        })).filter(ex => ex.sets.length > 0);
+
+        const completedExercises = exercises.length ||
+            s.exercises.filter(ex => ex.setsCompleted > 0).length;
+
+        if (completedExercises === 0 && status === 'partial') return;
+
+        const now = new Date();
+        const startedAt = (s.startedAt instanceof Date) ? s.startedAt : null;
+        const durationMin = startedAt ? Math.max(0, Math.round((now - startedAt) / 60000)) : 0;
+        const dateStr = now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+
+        const entry = {
+            id: Date.now(),
+            name: `Treino ${s.letter} — ${s.routineName}`,
+            routineId: s.routineId || null,
+            letter: s.letter || null,
+            date: `${dateStr}, ${now.getHours()}:${TTUtils.pad2(now.getMinutes())}`,
+            dateISO: TTUtils.todayISO(now),
+            durationMin: durationMin,
+            duration: durationMin > 0 ? TTUtils.formatDuration(durationMin) : '-- min',
+            status: status,
+            exercises: exercises
+        };
+
+        state.history.unshift(entry);
+
+        // Engine de PRs (Fase 2C): calcula sobre o histórico já com a entrada nova.
+        if (typeof PR !== 'undefined') {
+            try {
+                const newPRs = PR.checkNewPR(entry, state.history);
+                if (newPRs.length > 0) {
+                    entry.prs = newPRs.map(p => ({ type: p.type, value: p.value }));
+                }
+            } catch (err) {
+                console.warn('[PR] falha ao calcular recordes:', err);
+            }
+        }
+
+        Persistence.saveHistory(state.history);
+
+        if (typeof EventBus !== 'undefined') {
+            EventBus.emit('history:added', { entry: entry, status: status });
+        }
+    }
+
+    function renderPRSummary() {
+        const el = document.getElementById('pr-summary');
+        if (!el) return;
+        if (typeof PR === 'undefined') { el.innerHTML = ''; return; }
+        const stats = PR.getPRStatistics();
+        if (!stats.total) {
+            el.innerHTML = '<p class="text-muted" style="margin:0; font-size:0.85rem;">Nenhum recorde ainda. Conclua um treino para registrar PRs.</p>';
+            return;
+        }
+        el.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px;">
+                <span class="text-muted" style="font-size:0.8rem; text-transform:uppercase; letter-spacing:1px;">Recordes (PR)</span>
+                <span style="color:var(--primary); font-weight:700; font-size:0.85rem;">${stats.total} total • ${stats.thisWeek} esta semana</span>
+            </div>
+            ${stats.topExercise
+                ? `<p class="text-muted" style="margin:0; font-size:0.85rem;">Top: <strong style="color:var(--text-main)">${TTUtils.escapeHtml(stats.topExercise)}</strong> (${stats.topCount})</p>`
+                : ''}
+        `;
+    }
+
+    function renderHistory() {
+        renderPRSummary();
+        const container = document.getElementById('history-container');
+        if (!container) return;
+        container.innerHTML = state.history.map(h => {
+            const exs = Array.isArray(h.exercises) ? h.exercises : [];
+            const setsTotal = exs.reduce((t, ex) => t + (Array.isArray(ex.sets) ? ex.sets.length : 0), 0);
+            const exSummary = exs.length
+                ? exs.map(ex => `${TTUtils.escapeHtml(ex.name)} (${ex.sets.length}×)`).join(' • ')
+                : '';
+            const prBadge = (Array.isArray(h.prs) && h.prs.length)
+                ? `<span class="pr-badge">★ ${h.prs.length} PR</span>`
+                : '';
+            const metrics = [h.date, h.duration];
+            if (setsTotal > 0) metrics.push(`${setsTotal} séries`);
+            return `
+                <div class="history-card">
+                    <div class="history-info">
+                        <h4>${TTUtils.escapeHtml(h.name)}${prBadge}</h4>
+                        <p>${metrics.join(' • ')}</p>
+                        ${exSummary ? `<p class="history-exercises">${exSummary}</p>` : ''}
+                    </div>
+                    <div class="history-status ${h.status === 'partial' ? 'partial' : ''}">
+                        ${h.status === 'partial' ? translations[state.lang].partial : translations[state.lang].completed}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // ================= LÓGICA: EXCLUSÃO DE ROTINA + CONFIRMAÇÃO + FEEDBACK =================
+
+    let _confirmHandler = null;
+    let _toastTimer = null;
+
+    function showToast(message, type) {
+        const el = document.getElementById('app-toast');
+        if (!el) return;
+        el.innerText = message;
+        el.className = 'app-toast show' + (type === 'error' ? ' error' : '');
+        if (_toastTimer) clearTimeout(_toastTimer);
+        _toastTimer = setTimeout(() => { el.className = 'app-toast'; }, 2600);
+    }
+
+    function showConfirm(title, description, onConfirm) {
+        document.getElementById('confirm-title').innerText = title;
+        document.getElementById('confirm-desc').innerText = description;
+        _confirmHandler = typeof onConfirm === 'function' ? onConfirm : null;
+        document.getElementById('confirm-modal').classList.add('active');
+    }
+
+    function closeConfirmModal() {
+        document.getElementById('confirm-modal').classList.remove('active');
+        _confirmHandler = null;
+    }
+
+    function confirmModalAccept() {
+        const cb = _confirmHandler;
+        closeConfirmModal();
+        if (cb) cb();
+    }
+
+    // Persistência de rotinas: no modo memória (storage indisponível) a
+    // alteração já foi aplicada em runtime, então é considerada bem-sucedida.
+    function persistRoutines(list) {
+        const ok = Persistence.saveRoutines(list);
+        if (ok) return true;
+        return !Persistence.isEnabled();
+    }
+
+    function askDeleteRoutine(routineId) {
+        const r = state.routines.find(x => x.id === routineId);
+        if (!r) {
+            showToast('Treino não encontrado.', 'error');
+            return;
+        }
+        if (state.session && state.session.routineId === routineId) {
+            showToast('Treino em execução. Finalize ou saia antes de excluir.', 'error');
+            return;
+        }
+        showConfirm(
+            'Excluir treino?',
+            `O treino "${r.name}" (Treino ${r.letter}) será removido. Histórico e recordes são preservados.`,
+            () => {
+                const result = (typeof RoutineActions !== 'undefined')
+                    ? RoutineActions.deleteRoutine({
+                        routines: state.routines,
+                        session: state.session,
+                        id: routineId,
+                        save: persistRoutines
+                    })
+                    : { ok: true, routines: state.routines.filter(x => x.id !== routineId) };
+
+                if (!result.ok) {
+                    showToast(result.message || 'Não foi possível excluir.', 'error');
+                    return;
+                }
+
+                state.routines = result.routines;
+                if (state.editingRoutineId === routineId) state.editingRoutineId = null;
+                if (state.currentScreen === 'workouts') renderRoutines();
+                showToast('Treino excluído.', 'success');
+                if (typeof EventBus !== 'undefined') {
+                    EventBus.emit('routine:deleted', { id: routineId });
+                }
+            }
+        );
+    }
+
+    // ================= INICIALIZAÇÃO =================
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('search-catalog').addEventListener('input', renderCatalog);
+
+        // Modal genérico de confirmação (Fase 2C)
+        const confirmCancel = document.getElementById('confirm-cancel');
+        const confirmOk = document.getElementById('confirm-ok');
+        if (confirmCancel) confirmCancel.addEventListener('click', closeConfirmModal);
+        if (confirmOk) confirmOk.addEventListener('click', confirmModalAccept);
+
+        navigate('home');
+    });
+
+</script>
+
+<!-- ================= BOOTSTRAP ================= -->
+<script src="js/persistence.js"></script>
+<script>
+    // Restaura o estado salvo ANTES do DOMContentLoaded (a app já inicia hidratada).
+    Persistence.init();
+
+    // Reaplica o idioma restaurado e sincroniza o documento/HTML.
+    document.addEventListener('DOMContentLoaded', () => {
+        I18n.syncDocument(I18n.getLocale());
+        I18n.applyTranslations();
+    });
+</script>
+</body>
+</html>

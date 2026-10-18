@@ -1,0 +1,11 @@
+# Finais de linha determinísticos: LF em todos os textuais.
+# A Home é verificada por hash SHA-256, então o checkout precisa ser estável.
+* text=auto eol=lf
+
+# Assets binários (nunca normalizar)
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.ico binary
+*.pdf binary
