@@ -542,15 +542,32 @@ async function main() {
 
   const guard = await ev(`(function(){
     navigate('workouts');
-    state.session = { routineId: 'rA', exercises: [] };
+    var toast = document.getElementById('app-toast');
+    function attempt(session, recovered){
+      state.session = session;
+      sessionPendingDecision = !!recovered;
+      askDeleteRoutine('rA');
+      var out = {
+        modalOpen: document.getElementById('confirm-modal').classList.contains('active'),
+        msg: toast ? toast.innerText : ''
+      };
+      closeConfirmModal();
+      state.session = null;
+      sessionPendingDecision = false;
+      return out;
+    }
     var before = state.routines.length;
-    askDeleteRoutine('rA');
-    var modalOpen = document.getElementById('confirm-modal').classList.contains('active');
-    state.session = null;
-    return { before: before, modalOpen: modalOpen, after: state.routines.length };
+    var active = attempt({ routineId: 'rA', status: 'active', exercises: [] }, false);
+    var paused = attempt({ routineId: 'rA', status: 'paused', exercises: [] }, false);
+    var recovered = attempt({ routineId: 'rA', status: 'active', exercises: [] }, true);
+    return { before: before, after: state.routines.length, active: active, paused: paused, recovered: recovered };
   })()`);
   check("excluir: bloqueia rotina em execução (sessão ativa)",
-    guard.modalOpen === false && guard.after === guard.before, JSON.stringify(guard));
+    guard.active.modalOpen === false && guard.after === guard.before, JSON.stringify(guard.active));
+  check("excluir: mensagem distingue sessão ativa / pausada / recuperada",
+    /em execução/i.test(guard.active.msg) && /pausada/i.test(guard.paused.msg) &&
+      /recuperada/i.test(guard.recovered.msg),
+    JSON.stringify({ ativa: guard.active.msg, pausada: guard.paused.msg, recuperada: guard.recovered.msg }));
 
   await loadPage();
   const afterDelReload = await ev(`(function(){
@@ -564,6 +581,155 @@ async function main() {
   check("excluir: exclusão persiste após reload (somente ela)",
     afterDelReload.n === 3 && !afterDelReload.hasSmoke && afterDelReload.history >= 4 && afterDelReload.prs > 0,
     JSON.stringify(afterDelReload));
+
+  // --- Sprint 4: sessão persistida, retomada após reload e sem duplicidade ---
+  const sessionStart = await ev(`(function(){
+    state.editingRoutineId = 'rC';            // rotina C (1 exercício, 4 séries)
+    startWorkoutSession();
+    state.autoRestEnabled = false;            // sem descanso: foco na persistência
+    completeSet();                            // conclui 1 série real pelo fluxo da UI
+    var stored = JSON.parse(localStorage.getItem('tt_ds_v1_session') || 'null');
+    return {
+      player: document.getElementById('screen-player').classList.contains('active'),
+      sessionId: state.session ? state.session.id : null,
+      status: state.session ? state.session.status : null,
+      setsCompleted: state.session ? state.session.exercises[0].setsCompleted : -1,
+      storedId: stored ? stored.id : null,
+      storedSets: stored ? stored.exercises[0].setsCompleted : -1,
+      routineId: stored ? stored.routineId : null
+    };
+  })()`);
+  check("Sprint 4: iniciar treino abre o player e persiste a sessão",
+    sessionStart.player && !!sessionStart.storedId && sessionStart.storedId === sessionStart.sessionId,
+    JSON.stringify(sessionStart));
+  check("Sprint 4: série concluída é persistida no progresso",
+    sessionStart.storedSets === 1 && sessionStart.setsCompleted === 1, JSON.stringify(sessionStart));
+  check("Sprint 4: routineId preservado na sessão persistida",
+    sessionStart.routineId === 'rC', JSON.stringify(sessionStart));
+
+  // --- RELOAD: a sessão em andamento volta e o app oferece retomar ----------
+  await loadPage();
+  const restored = await ev(`(function(){
+    return {
+      sessionId: state.session ? state.session.id : null,
+      status: state.session ? state.session.status : null,
+      sets: state.session ? state.session.exercises[0].setsCompleted : -1,
+      routineId: state.session ? state.session.routineId : null,
+      modal: document.getElementById('resume-modal').classList.contains('active'),
+      player: document.getElementById('screen-player').classList.contains('active')
+    };
+  })()`);
+  check("Sprint 4 RELOAD: sessão em andamento restaurada (sanitizada)",
+    restored.sessionId === sessionStart.sessionId && restored.sets === 1 &&
+      restored.status === 'active' && restored.routineId === 'rC',
+    JSON.stringify(restored));
+  check("Sprint 4 RELOAD: oferece retomar ou descartar (não entra no player sozinho)",
+    restored.modal === true && restored.player === false, JSON.stringify(restored));
+
+  const resumed = await ev(`(function(){
+    resumeRestoredSession();
+    return {
+      player: document.getElementById('screen-player').classList.contains('active'),
+      modal: document.getElementById('resume-modal').classList.contains('active'),
+      sessionId: state.session ? state.session.id : null
+    };
+  })()`);
+  check("Sprint 4: retomar volta ao player com a MESMA execução",
+    resumed.player && resumed.modal === false && resumed.sessionId === sessionStart.sessionId,
+    JSON.stringify(resumed));
+
+  // --- conclui o treino e confere histórico/PRs/limpeza --------------------
+  const finished = await ev(`(function(){
+    var before = state.history.length;
+    var prsBefore = PR.getAll().length;
+    var id = state.session.id;
+    var guard = 0;
+    while (state.session && state.session.status !== 'finished' && guard++ < 20) completeSet();
+    var isFinished = !!state.session && state.session.status === 'finished';
+    completeSet();                            // toque de CONFIRMAÇÃO: grava e sai
+    var top = state.history[0];
+    return {
+      isFinished: isFinished,
+      before: before, after: state.history.length,
+      entryId: top ? top.id : null,
+      entrySessionId: top ? top.sessionId : null,
+      entryStatus: top ? top.status : null,
+      entrySets: top && top.exercises && top.exercises[0] ? top.exercises[0].sets.length : 0,
+      prsAdded: PR.getAll().length - prsBefore,
+      storedSession: localStorage.getItem('tt_ds_v1_session'),
+      home: document.getElementById('screen-home').classList.contains('active'),
+      id: id
+    };
+  })()`);
+  check("Sprint 4: treino concluído registra o histórico com a execução de origem",
+    finished.isFinished && finished.after === finished.before + 1 &&
+      String(finished.entrySessionId) === finished.id && finished.entryStatus === 'completed',
+    JSON.stringify(finished));
+  check("Sprint 4: id da entrada do histórico continua numérico (contrato legado)",
+    typeof finished.entryId === 'number' && finished.entryId > 0, String(finished.entryId));
+  check("Sprint 4: histórico guarda as séries concluídas e gera PRs",
+    finished.entrySets >= 1 && finished.prsAdded > 0 && finished.home, JSON.stringify(finished));
+  check("Sprint 4: sessão persistida é limpa ao finalizar",
+    finished.storedSession === null, String(finished.storedSession));
+
+  const noDup = await ev(`(function(){
+    var histBefore = state.history.length;
+    var prsBefore = PR.getAll().length;
+    var again = PR.checkNewPR(state.history[0], state.history);
+    return { histBefore: histBefore, histAfter: state.history.length, newPRs: again.length, prsSame: PR.getAll().length === prsBefore };
+  })()`);
+  check("Sprint 4: reprocessar a execução não duplica histórico nem PRs",
+    noDup.histAfter === noDup.histBefore && noDup.newPRs === 0 && noDup.prsSame, JSON.stringify(noDup));
+
+  // --- descartar a sessão recuperada não mexe em nada além dela ------------
+  const discardedStart = await ev(`(function(){
+    state.editingRoutineId = 'rB';
+    startWorkoutSession();
+    state.autoRestEnabled = false;
+    completeSet();
+    return { id: state.session.id, stored: !!localStorage.getItem('tt_ds_v1_session') };
+  })()`);
+  await loadPage();
+  const discarded = await ev(`(function(){
+    var histBefore = state.history.length;
+    var prsBefore = PR.getAll().length;
+    var routinesBefore = state.routines.length;
+    var catBefore = Catalog.all().length;
+    var modal = document.getElementById('resume-modal').classList.contains('active');
+    discardRestoredSession();
+    return {
+      modal: modal,
+      session: state.session,
+      stored: localStorage.getItem('tt_ds_v1_session'),
+      histSame: state.history.length === histBefore,
+      prsSame: PR.getAll().length === prsBefore,
+      routinesSame: state.routines.length === routinesBefore,
+      catSame: Catalog.all().length === catBefore
+    };
+  })()`);
+  check("Sprint 4: descartar a sessão recuperada limpa só a sessão",
+    discardedStart.stored === true && discarded.modal === true && discarded.session === null &&
+      discarded.stored === null && discarded.histSame && discarded.prsSame &&
+      discarded.routinesSame && discarded.catSame,
+    JSON.stringify({ start: discardedStart, after: discarded }));
+
+  // --- RELOAD final: nada de sessão pendente e dados preservados -----------
+  await loadPage();
+  const endState = await ev(`(function(){
+    return {
+      session: state.session,
+      modal: document.getElementById('resume-modal').classList.contains('active'),
+      routines: state.routines.length,
+      history: state.history.length,
+      prs: PR.getAll().length,
+      catalog: Catalog.all().length
+    };
+  })()`);
+  check("Sprint 4: sem sessão pendente não há convite para retomar",
+    endState.session === null && endState.modal === false, JSON.stringify(endState));
+  check("Sprint 4: rotinas, histórico, PRs e catálogo intactos após o ciclo",
+    endState.routines === 3 && endState.history >= 5 && endState.prs > 12 && endState.catalog >= 80,
+    JSON.stringify(endState));
 
   // --- Erros de JS ----------------------------------------------------------
   const realErrors = jsErrors.filter((e) => !/unsplash|net::ERR|Failed to load resource|ERR_BLOCKED/i.test(e));

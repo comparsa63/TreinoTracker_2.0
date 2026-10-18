@@ -703,6 +703,19 @@
         </div>
     </div>
 
+    <!-- MODAL DE SESSÃO RECUPERADA (Sprint 4) -->
+    <div class="modal-overlay" id="resume-modal">
+        <div class="modal-content">
+            <h3 data-i18n="resume_title">Treino em andamento</h3>
+            <p data-i18n="resume_desc">Você tem um treino não finalizado. Deseja retomar de onde parou?</p>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="resumeRestoredSession()" data-i18n="resume_btn">Retomar treino</button>
+                <button class="btn btn-danger" onclick="discardRestoredSession()" data-i18n="resume_discard">Descartar treino</button>
+                <button class="btn" onclick="closeResumeModal()" data-i18n="resume_later">Deixar para depois</button>
+            </div>
+        </div>
+    </div>
+
     <!-- TOAST (feedback visual — Fase 2C) -->
     <div id="app-toast" class="app-toast" role="status" aria-live="polite"></div>
 
@@ -733,6 +746,8 @@
 <script src="js/events.js"></script>
 <script src="js/routine-actions.js"></script>
 <script src="js/pr.js"></script>
+<script src="js/workout-session.js"></script>
+<script src="js/workout-controller.js"></script>
 
 <script>
     // ================= CATÁLOGO REAL (Fase 2B) =================
@@ -789,6 +804,12 @@
         autoRestEnabled: true, // Controla o toggle de descanso
         restTimer: { id: null, time: 0, total: 0, isRunning: false }
     };
+
+    // Sprint 4: sessão veio do storage e o usuário ainda não decidiu
+    // (retomar/descartar). É estado de UI — não persistido e não duplica o dado
+    // da sessão. Serve para explicar, com o estado real, por que a rotina
+    // vinculada não pode ser excluída.
+    let sessionPendingDecision = false;
 
     // ================= DICIONÁRIO DE TRADUÇÕES =================
     // Movido para js/i18n.js (fonte única: pt/en/es). Mantemos aqui a mesma
@@ -1045,27 +1066,24 @@
 
     function startWorkoutSession() {
         const routine = state.routines.find(x => x.id === state.editingRoutineId);
-        
-        state.session = {
-            routineId: routine.id,
-            routineName: routine.name,
-            letter: routine.letter,
-            currentExerciseIndex: 0,
-            currentSetIndex: 1,
-            exercises: routine.exercises.map(ex => {
-                const cat = catalogItem(ex.catalogId);
-                return {
-                    ...ex,
-                    name: cat.name, muscle: cat.muscle, img: cat.img,
-                    actualWeight: ex.weight,
-                    actualReps: ex.reps,
-                    setsCompleted: 0,
-                    completedSets: []
-                };
-            }),
-            isFinished: false,
-            startedAt: new Date()
-        };
+
+        // Já existe treino em andamento: NÃO sobrescreve (perderia o progresso).
+        // Reoferece retomar/descartar, fechando o ciclo com o convite do boot.
+        if (state.session) {
+            showResumePrompt();
+            return;
+        }
+
+        // Sessão criada pelo DOMÍNIO (js/workout-session.js) e persistida pelo
+        // CONTROLADOR. `catalogItem` entra como `resolve`, preservando
+        // nome/músculo/imagem do catálogo real.
+        const result = WorkoutController.start(routine, catalogItem, new Date());
+        if (!result.ok) {
+            showToast(result.message || 'Não foi possível iniciar o treino.', 'error');
+            return;
+        }
+        state.session = result.session;
+        sessionPendingDecision = false;
 
         // Reseta o toggle para ligado ao iniciar um novo treino (opcional, mas boa prática)
         state.autoRestEnabled = true;
@@ -1139,63 +1157,97 @@
         const ex = state.session.exercises[state.session.currentExerciseIndex];
         if (field === 'weight') ex.actualWeight = Math.max(0, ex.actualWeight + amount);
         if (field === 'reps') ex.actualReps = Math.max(1, ex.actualReps + amount);
+        // Sprint 4: o ajuste faz parte do progresso -> persiste junto.
+        WorkoutController.save(state.session);
         updatePlayerUI();
     }
 
     function completeSet() {
         const s = state.session;
-        if (s.isFinished) {
+        if (!s) return;
+
+        // Treino já concluído: este toque CONFIRMA o registro no histórico.
+        if (s.status === 'finished' || s.isFinished) {
             saveSessionToHistory('completed');
             state.session = null;
+            sessionPendingDecision = false;
             navigate('home');
             return;
         }
 
-        const ex = s.exercises[s.currentExerciseIndex];
+        const before = { ex: s.currentExerciseIndex, set: s.currentSetIndex };
+        const current = s.exercises[before.ex];
+        if (!current) return;
 
         // Registra a série EFETIVAMENTE concluída (carga/reps reais do momento).
-        // Séries pendentes nunca contam como concluídas (Fase 2C).
-        if (!Array.isArray(ex.completedSets)) ex.completedSets = [];
-        ex.completedSets.push({ weight: ex.actualWeight, reps: ex.actualReps });
+        // A regra (séries pendentes não contam, limites, idempotência de fim)
+        // vive no domínio; aqui só traduzimos a recusa em feedback.
+        const result = WorkoutController.completeSet(s, {
+            weight: current.actualWeight,
+            reps: current.actualReps
+        }, new Date());
 
-        ex.setsCompleted++;
-        s.currentSetIndex++;
-
-        if (s.currentSetIndex > ex.sets) {
-            if (s.currentExerciseIndex < s.exercises.length - 1) {
-                s.currentExerciseIndex++;
-                s.currentSetIndex = 1;
-                updatePlayerUI();
-                return;
-            } else {
-                s.isFinished = true;
-                updatePlayerUI();
-                return;
-            }
+        if (!result.ok) {
+            showToast(result.message || 'Não foi possível concluir a série.', 'error');
+            return;
         }
 
         updatePlayerUI();
-        
+
+        // Sem descanso quando o exercício mudou ou o treino terminou
+        // (mesmo comportamento de antes).
+        const advanced = result.session.currentExerciseIndex !== before.ex;
+        if (result.isFinished || advanced) return;
+
         // VERIFICA SE O DESCANSO AUTOMÁTICO ESTÁ LIGADO ANTES DE INICIAR O TIMER
         if (state.autoRestEnabled) {
-            startRestTimer(ex.rest);
+            startRestTimer(result.session.exercises[result.session.currentExerciseIndex].rest);
         }
+    }
+
+    // Sprint 4: pausa/retomada da sessão (persistidas pelo controlador).
+    // O botão de pausa na UI entra junto com o RestTimer (etapa seguinte),
+    // quando pausar também precisará congelar o descanso.
+    function pauseWorkout() {
+        if (!state.session) return false;
+        const result = WorkoutController.pause(state.session, new Date());
+        if (!result.ok) {
+            showToast(result.message || 'Não foi possível pausar o treino.', 'error');
+            return false;
+        }
+        updatePlayerUI();
+        return true;
+    }
+
+    function resumeWorkout(now) {
+        if (!state.session) return false;
+        const result = WorkoutController.resume(state.session, now || new Date());
+        if (!result.ok) {
+            showToast(result.message || 'Não foi possível retomar o treino.', 'error');
+            return false;
+        }
+        updatePlayerUI();
+        return true;
     }
 
     function prevExercise() {
-        if (state.session.currentExerciseIndex > 0) {
-            state.session.currentExerciseIndex--;
-            state.session.currentSetIndex = state.session.exercises[state.session.currentExerciseIndex].setsCompleted + 1;
-            updatePlayerUI();
+        if (!state.session) return;
+        const result = WorkoutController.prev(state.session);
+        if (!result.ok) {
+            if (result.reason !== 'at-start') showToast(result.message, 'error');
+            return;
         }
+        updatePlayerUI();
     }
 
     function nextExercise() {
-        if (state.session.currentExerciseIndex < state.session.exercises.length - 1) {
-            state.session.currentExerciseIndex++;
-            state.session.currentSetIndex = state.session.exercises[state.session.currentExerciseIndex].setsCompleted + 1;
-            updatePlayerUI();
+        if (!state.session) return;
+        const result = WorkoutController.next(state.session);
+        if (!result.ok) {
+            if (result.reason !== 'at-end') showToast(result.message, 'error');
+            return;
         }
+        updatePlayerUI();
     }
 
     // ================= LÓGICA: DESCANSO =================
@@ -1256,53 +1308,74 @@
     function saveAndExit() {
         saveSessionToHistory('partial');
         state.session = null;
+        sessionPendingDecision = false;
+        WorkoutController.clear();
         closeExitModal();
         navigate('home');
     }
 
     function discardAndExit() {
         state.session = null;
+        sessionPendingDecision = false;
+        // Sprint 4: descartar remove a sessão persistida e NADA mais
+        // (histórico, rotinas, catálogo e PRs ficam intactos).
+        WorkoutController.clear();
         closeExitModal();
         navigate('home');
     }
 
+    // ================= SESSÃO RECUPERADA APÓS RELOAD (Sprint 4) =================
+
+    function showResumePrompt() {
+        const modal = document.getElementById('resume-modal');
+        if (!modal || !state.session) return;
+        modal.classList.add('active');
+    }
+
+    function closeResumeModal() {
+        const modal = document.getElementById('resume-modal');
+        if (modal) modal.classList.remove('active');
+    }
+
+    function resumeRestoredSession() {
+        closeResumeModal();
+        if (!state.session) return;
+        sessionPendingDecision = false;
+        // Sessão recuperada pausada: retoma o relógio antes de voltar ao player.
+        if (state.session.status === 'paused') {
+            WorkoutController.resume(state.session, new Date());
+        }
+        navigate('player');
+        updatePlayerUI();
+    }
+
+    function discardRestoredSession() {
+        closeResumeModal();
+        state.session = null;
+        sessionPendingDecision = false;
+        WorkoutController.clear();
+        showToast('Treino descartado.', 'success');
+    }
+
     function saveSessionToHistory(status) {
         const s = state.session;
-        if (!s || !Array.isArray(s.exercises)) return;
+        if (!s || !Array.isArray(s.exercises)) return { ok: false, reason: 'no-session', message: '' };
 
-        // Só as séries EFETIVAMENTE concluídas entram no histórico (Fase 2C).
-        const exercises = s.exercises.map(ex => ({
-            catalogId: ex.catalogId || null,
-            name: ex.name || '',
-            muscle: ex.muscle || '',
-            sets: (Array.isArray(ex.completedSets) ? ex.completedSets : [])
-                .map(st => ({ weight: Number(st.weight) || 0, reps: Number(st.reps) || 0 }))
-        })).filter(ex => ex.sets.length > 0);
+        // Entrada montada pelo controlador, com identidade ESTÁVEL (`session.id`)
+        // e recusa de duplicidade: a mesma execução nunca entra duas vezes,
+        // mesmo após reload ou chamadas repetidas de finalização.
+        const result = WorkoutController.appendToHistory(state.history, s, status, new Date());
+        if (!result.ok) {
+            if (result.reason === 'duplicate-history') {
+                console.warn('[Workout] sessão já registrada no histórico:', WorkoutController.sessionKey(s));
+            }
+            // Operação terminal: a sessão sai do estado ativo de qualquer modo.
+            WorkoutController.clear();
+            return result;
+        }
 
-        const completedExercises = exercises.length ||
-            s.exercises.filter(ex => ex.setsCompleted > 0).length;
-
-        if (completedExercises === 0 && status === 'partial') return;
-
-        const now = new Date();
-        const startedAt = (s.startedAt instanceof Date) ? s.startedAt : null;
-        const durationMin = startedAt ? Math.max(0, Math.round((now - startedAt) / 60000)) : 0;
-        const dateStr = now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
-
-        const entry = {
-            id: Date.now(),
-            name: `Treino ${s.letter} — ${s.routineName}`,
-            routineId: s.routineId || null,
-            letter: s.letter || null,
-            date: `${dateStr}, ${now.getHours()}:${TTUtils.pad2(now.getMinutes())}`,
-            dateISO: TTUtils.todayISO(now),
-            durationMin: durationMin,
-            duration: durationMin > 0 ? TTUtils.formatDuration(durationMin) : '-- min',
-            status: status,
-            exercises: exercises
-        };
-
-        state.history.unshift(entry);
+        const entry = result.entry;
+        state.history = result.history;
 
         // Engine de PRs (Fase 2C): calcula sobre o histórico já com a entrada nova.
         if (typeof PR !== 'undefined') {
@@ -1318,9 +1391,14 @@
 
         Persistence.saveHistory(state.history);
 
+        // Histórico gravado: não há mais nada a retomar.
+        WorkoutController.clear();
+
         if (typeof EventBus !== 'undefined') {
             EventBus.emit('history:added', { entry: entry, status: status });
         }
+
+        return result;
     }
 
     function renderPRSummary() {
@@ -1420,7 +1498,9 @@
             return;
         }
         if (state.session && state.session.routineId === routineId) {
-            showToast('Treino em execução. Finalize ou saia antes de excluir.', 'error');
+            // Sprint 4: explica o bloqueio com o ESTADO REAL da sessão
+            // (ativa / pausada / concluída / recuperada aguardando decisão).
+            showToast(RoutineActions.blockMessage(state.session, sessionPendingDecision), 'error');
             return;
         }
         showConfirm(
@@ -1431,6 +1511,7 @@
                     ? RoutineActions.deleteRoutine({
                         routines: state.routines,
                         session: state.session,
+                        recovered: sessionPendingDecision,
                         id: routineId,
                         save: persistRoutines
                     })
@@ -1477,6 +1558,13 @@
     document.addEventListener('DOMContentLoaded', () => {
         I18n.syncDocument(I18n.getLocale());
         I18n.applyTranslations();
+
+        // Sprint 4: se havia uma sessão de treino em andamento, oferece
+        // retomar ou descartar (o estado já veio sanitizado pelo domínio).
+        // Enquanto o usuário não decide, a sessão conta como "recuperada
+        // aguardando decisão" — é o estado que a mensagem de exclusão informa.
+        if (state.session) sessionPendingDecision = true;
+        showResumePrompt();
     });
 </script>
 </body>

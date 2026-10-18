@@ -13,18 +13,42 @@
  *   - Só altera o resultado se a persistência confirmar (`save` retorna true).
  *   - Não toca em catálogo, histórico nem PRs.
  *
+ * Sprint 4: `blockMessage(session, recovered)` descreve o MOTIVO do bloqueio
+ * conforme o estado real da sessão (ativa, pausada, concluída aguardando
+ * finalização ou recuperada aguardando decisão). O bloqueio em si não mudou.
+ *
  * Carregado antes do script principal. Expõe `window.RoutineActions` e
  * `module.exports`.
  */
 (function (global) {
   "use strict";
 
+  /** Mensagem padrão (sessão ativa sem informação adicional de estado). */
+  const MSG_ACTIVE = "Treino em execução. Finalize ou saia da sessão antes de excluir.";
+
   const RoutineActions = {
+    /** Mensagem de bloqueio conforme o estado real da sessão (Sprint 4). */
+    blockMessage(session, recovered) {
+      if (!session) return "";
+      if (recovered) {
+        return "Sessão de treino recuperada aguardando decisão. Retome ou descarte o treino antes de excluir esta rotina.";
+      }
+      if (session.status === "paused") {
+        return "Sessão de treino pausada. Retome ou saia da sessão antes de excluir.";
+      }
+      if (session.status === "finished") {
+        return "Sessão de treino concluída aguardando finalização. Finalize antes de excluir.";
+      }
+      return MSG_ACTIVE;
+    },
+
     /**
      * @param {Object}   opts
      * @param {Array}    opts.routines  lista atual de rotinas
      * @param {string}   opts.id        id da rotina a excluir
      * @param {Object}   [opts.session] sessão ativa (se houver)
+     * @param {boolean}  [opts.recovered] sessão veio de recarga e ainda não foi
+     *                  retomada/descartada pelo usuário (só afeta a mensagem)
      * @param {Function} [opts.save]    (routines) => boolean; se omitido, não persiste
      * @returns {{ok:boolean, routines?:Array, removedId?:string, reason?:string, message?:string}}
      */
@@ -50,7 +74,7 @@
         return {
           ok: false,
           reason: "active-session",
-          message: "Treino em execução. Finalize ou saia da sessão antes de excluir.",
+          message: RoutineActions.blockMessage(session, o.recovered === true),
         };
       }
 

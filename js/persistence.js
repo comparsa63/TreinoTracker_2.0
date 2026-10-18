@@ -8,20 +8,26 @@
  * Chaves persistidas (namespace `tt_ds_v1_`):
  *   routines  -> lista de rotinas do usuário
  *   history   -> histórico de treinos concluídos/parciais (enriquecido na Fase 2C
- *                com exercícios, séries concluídas, carga/reps e duração)
+ *                com exercícios, séries concluídas, carga/reps e duração;
+ *                `sessionId` (Sprint 4) identifica a execução de origem, sendo
+ *                `id` mantido numérico por retrocompatibilidade)
  *   prs       -> recordes pessoais (engine js/pr.js)
  *   lang      -> idioma ativo (compartilhado com js/i18n.js)
  *   autoRest  -> preferência do toggle de descanso automático
+ *   session   -> sessão de treino EM ANDAMENTO (Sprint 4). Aditiva: as chaves
+ *                acima continuam com o mesmo formato e a mesma versão 1.
  *
  * Depende de: services/storage.js, js/utils.js, js/i18n.js
+ *             js/workout-session.js (apenas para a chave `session`)
  */
 (function (global) {
   "use strict";
 
-  const KEYS = { routines: "routines", history: "history", prs: "prs", lang: "lang", autoRest: "autoRest" };
+  const KEYS = { routines: "routines", history: "history", prs: "prs", lang: "lang", autoRest: "autoRest", session: "session" };
   // v1: histórico passou a guardar exercícios/séries concluídas e PRs de forma
   // ADITIVA e retrocompatível (entradas antigas continuam válidas). Não houve
   // mudança de formato que exija migração, por isso a versão permanece 1.
+  // (Sprint 4: a chave `session` também é aditiva — nada existente mudou.)
   const SCHEMA_VERSION = 1;
   const VALID_STATUS = ["completed", "partial"];
 
@@ -35,6 +41,15 @@
 
   function i18n() {
     return global.I18n || null;
+  }
+
+  /**
+   * Módulo de domínio da sessão (js/workout-session.js).
+   * A validação/correção da sessão recuperada é responsabilidade do domínio:
+   * a Persistence NÃO reimplementa essas regras (fonte única).
+   */
+  function sessionModule() {
+    return global.WorkoutSession || null;
   }
 
   /**
@@ -104,13 +119,16 @@
       duration: str(raw.duration, "-- min"),
       status: VALID_STATUS.indexOf(raw.status) !== -1 ? raw.status : "completed",
     };
-    // Campos enriquecidos (Fase 2C) — opcionais e retrocompatíveis.
+    // Campos enriquecidos (Fase 2C) - opcionais e retrocompatíveis.
     if (str(raw.dateISO, null)) entry.dateISO = raw.dateISO;
     if (raw.durationMin != null) {
       entry.durationMin = Math.max(0, Math.round(toNumber(raw.durationMin, 0)));
     }
     if (str(raw.routineId, null)) entry.routineId = raw.routineId;
     if (str(raw.letter, null)) entry.letter = raw.letter;
+    // Sprint 4: identidade estável da execução (aditiva). Precisa sobreviver ao
+    // round-trip para que a deduplicação continue valendo após uma recarga.
+    if (str(raw.sessionId, null)) entry.sessionId = raw.sessionId;
     const exercises = sanitizeHistoryExercises(raw.exercises);
     if (exercises && exercises.length) entry.exercises = exercises;
     const prs = sanitizePRBadges(raw.prs);
@@ -182,6 +200,17 @@
   function sanitizePRs(raw) {
     if (!Array.isArray(raw)) return null;
     return raw.map(sanitizePRRecord).filter(Boolean);
+  }
+
+  /**
+   * Sessão em andamento. Delega TODA a validação ao domínio
+   * (`WorkoutSession.sanitize`): a Persistence não duplica as regras.
+   * @returns {Object|null} null quando ausente/corrompida ou sem o módulo.
+   */
+  function sanitizeSession(raw) {
+    const ws = sessionModule();
+    if (!ws || typeof ws.sanitize !== "function") return null;
+    return ws.sanitize(raw);
   }
 
   // -------------------------------------------------------------------------
@@ -261,6 +290,20 @@
         result.skipped.push("autoRest");
       }
 
+      // Sessão de treino em andamento (Sprint 4). Corrompida -> ignorada
+      // (a chave só é removida por `clearSession`/`reset`, nunca na leitura).
+      if (s.has(KEYS.session)) {
+        const session = sanitizeSession(s.load(KEYS.session, null));
+        if (session) {
+          st.session = session;
+          result.restored.push("session(" + session.exercises.length + "ex, " + session.status + ")");
+        } else {
+          result.skipped.push("session");
+        }
+      } else {
+        result.skipped.push("session");
+      }
+
       return result;
     },
 
@@ -310,6 +353,39 @@
       return s.save(KEYS.autoRest, !!enabled);
     },
 
+    /**
+     * Lê a sessão de treino em andamento já sanitizada pelo domínio.
+     * @returns {Object|null}
+     */
+    loadSession() {
+      const s = store();
+      if (!s) return null;
+      return sanitizeSession(s.load(KEYS.session, null));
+    },
+
+    /**
+     * Persiste a sessão em andamento. Uma sessão inválida NUNCA é gravada
+     * (evita gravar lixo que depois não poderia ser recuperado com segurança).
+     */
+    saveSession(session) {
+      const s = store();
+      if (!s) return false;
+      const clean = sanitizeSession(session);
+      if (!clean) return false;
+      return s.save(KEYS.session, clean);
+    },
+
+    /**
+     * Remove a sessão em andamento. Não toca em histórico, rotinas, catálogo
+     * nem PRs — apenas a chave `session`.
+     */
+    clearSession() {
+      const s = store();
+      if (!s) return false;
+      s.remove(KEYS.session);
+      return true;
+    },
+
     /** Grava tudo de uma vez (usado no bootstrap pós-hidratação, se preciso). */
     saveAll(target) {
       const st = target || null;
@@ -329,6 +405,7 @@
       s.remove(KEYS.history);
       s.remove(KEYS.prs);
       s.remove(KEYS.autoRest);
+      s.remove(KEYS.session);
       return true;
     },
 

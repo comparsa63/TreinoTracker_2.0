@@ -81,6 +81,11 @@ function loadModules(sandbox, files) {
   }
 }
 
+/** `instanceof Date` não atravessa realms do vm: checagem agnóstica. */
+function isDateValue(v) {
+  return Object.prototype.toString.call(v) === "[object Date]";
+}
+
 // ---------------------------------------------------------------------------
 // TTUtils
 // ---------------------------------------------------------------------------
@@ -171,7 +176,7 @@ function testI18n() {
   suite("I18n");
 
   ok("3 idiomas", I.LOCALES.join(",") === "pt,en,es");
-  eq("44 chaves", I.keys().length, 44);
+  eq("49 chaves", I.keys().length, 49);
 
   const ptKeys = Object.keys(I.dict.pt).sort();
   const enKeys = Object.keys(I.dict.en).sort();
@@ -675,6 +680,37 @@ function testRoutineActions() {
   ok("canDelete verdadeiro", RA.canDelete(routines, "rA", null) === true);
   ok("canDelete falso com sessão ativa", RA.canDelete(routines, "rA", { routineId: "rA" }) === false);
   ok("canDelete falso para id inexistente", RA.canDelete(routines, "rZ", null) === false);
+
+  // --- Sprint 4: mensagem do bloqueio reflete o ESTADO REAL da sessão -------
+  ok("bloqueio sem sessão -> mensagem vazia", RA.blockMessage(null, false) === "");
+  ok("mensagem de sessão ativa (legado preservado)",
+    RA.blockMessage({ routineId: "rA", status: "active" }) === "Treino em execução. Finalize ou saia da sessão antes de excluir.");
+  ok("sessão sem status conhecido mantém a mensagem legada",
+    RA.blockMessage({ routineId: "rA" }) === "Treino em execução. Finalize ou saia da sessão antes de excluir.");
+  ok("mensagem de sessão PAUSADA",
+    /pausada/i.test(RA.blockMessage({ routineId: "rA", status: "paused" })));
+  ok("mensagem de sessão CONCLUÍDA aguardando finalização",
+    /concluída aguardando finalização/i.test(RA.blockMessage({ routineId: "rA", status: "finished" })));
+  ok("mensagem de sessão RECUPERADA aguardando decisão",
+    /recuperada aguardando decisão/i.test(RA.blockMessage({ routineId: "rA", status: "active" }, true)));
+  ok("recuperada tem prioridade sobre o status (é o estado percebido pelo usuário)",
+    /recuperada/i.test(RA.blockMessage({ routineId: "rA", status: "paused" }, true)));
+  ok("mensagens distinguem os 4 estados",
+    new Set([
+      RA.blockMessage({ status: "active" }),
+      RA.blockMessage({ status: "paused" }),
+      RA.blockMessage({ status: "finished" }),
+      RA.blockMessage({ status: "active" }, true),
+    ]).size === 4);
+
+  const paused = RA.deleteRoutine({ routines, id: "rA", session: { routineId: "rA", status: "paused" } });
+  ok("bloqueio por sessão pausada mantém reason e explica o estado",
+    paused.reason === "active-session" && /pausada/i.test(paused.message));
+  const recovered = RA.deleteRoutine({ routines, id: "rA", session: { routineId: "rA", status: "active" }, recovered: true });
+  ok("bloqueio por sessão recuperada mantém reason e explica o estado",
+    recovered.reason === "active-session" && /recuperada/i.test(recovered.message));
+  ok("regra de bloqueio inalterada (canDelete segue falso com sessão)",
+    RA.canDelete(routines, "rA", { routineId: "rA", status: "paused" }) === false);
 }
 
 // ---------------------------------------------------------------------------
@@ -937,6 +973,313 @@ function testWorkoutSession() {
 }
 
 // ---------------------------------------------------------------------------
+// Persistence — sessão de treino em andamento (Sprint 4 / E2)
+// ---------------------------------------------------------------------------
+function testPersistenceSession() {
+  const sb = makeSandbox();
+  loadModules(sb, ["js/utils.js", "services/storage.js", "js/i18n.js", "js/workout-session.js", "js/persistence.js"]);
+  const S = sb.StorageService;
+  const P = sb.Persistence;
+  const WS = sb.WorkoutSession;
+
+  suite("Persistence (sessão em andamento)");
+
+  const T0 = new Date("2026-10-18T10:00:00.000Z");
+  const T5 = new Date("2026-10-18T10:05:00.000Z");
+  const routine = {
+    id: "rA", letter: "A", name: "Peito e tríceps",
+    exercises: [
+      { catalogId: "C-02", sets: 2, reps: 12, weight: 60, rest: 60 },
+      { catalogId: "C-01", sets: 1, reps: 10, weight: 40, rest: 60 },
+    ],
+  };
+  const resolve = (id) => ({ name: "Ex " + id, muscle: "Peito", img: "assets/images/peito.jpg" });
+
+  eq("chave lógica própria da sessão", P.KEYS.session, "session");
+  ok("schema continua v1 (mudança aditiva)", P.SCHEMA_VERSION === 1);
+  eq("sem sessão salva -> loadSession null", P.loadSession(), null);
+
+  // ---- Round-trip de sessão ativa ----------------------------------------
+  const s = WS.create(routine, T0, { resolve });
+  WS.completeSet(s, { weight: 62.5, reps: 12 }, T0);
+  ok("saveSession grava", P.saveSession(s) === true);
+  ok("gravou na chave física do namespace", !!sb.localStorage.getItem("tt_ds_v1_session"));
+
+  const back = P.loadSession();
+  ok("loadSession devolve sessão utilizável", !!back && back.id === s.id && back.status === "active");
+  ok("preserva o routineId (proteção de exclusão)", back.routineId === "rA");
+  ok("preserva nome/músculo vindos do resolve", back.exercises[0].name === "Ex C-02" && back.exercises[0].muscle === "Peito");
+  eq("preserva o progresso", WS.progress(back), WS.progress(s));
+  eq("preserva as séries concluídas", back.exercises[0].completedSets, [{ weight: 62.5, reps: 12 }]);
+  ok("startedAt volta como Date", isDateValue(back.startedAt) && back.startedAt.getTime() === T0.getTime());
+
+  // ---- Hidratação ---------------------------------------------------------
+  const target = { routines: [], history: [], session: null, lang: "pt", autoRestEnabled: true };
+  const r1 = P.hydrate(target);
+  ok("hydrate restaura a sessão", !!target.session && target.session.id === s.id);
+  ok("hydrate registra a restauração (log)",
+    r1.restored.indexOf("session(2ex, active)") !== -1, JSON.stringify(r1.restored));
+
+  // ---- Sessão pausada ----------------------------------------------------
+  const paused = WS.create(routine, T0, { resolve });
+  WS.pause(paused, T5);
+  P.saveSession(paused);
+  const backPaused = P.loadSession();
+  ok("recupera sessão pausada", backPaused.status === "paused" && backPaused.isFinished === false);
+  ok("preserva pausedAt da sessão pausada",
+    isDateValue(backPaused.pausedAt) && backPaused.pausedAt.getTime() === T5.getTime());
+  ok("hydrate entrega a sessão pausada", P.hydrate({ session: null }).restored.length === 1);
+  P.clearSession();
+  const noSession = { session: "intacto" };
+  const rNoSession = P.hydrate(noSession);
+  ok("sem chave salva: hydrate não mexe em session",
+    noSession.session === "intacto" && rNoSession.skipped.indexOf("session") !== -1);
+
+  // ---- Dados corrompidos -------------------------------------------------
+  ok("saveSession recusa sessão inválida", P.saveSession({ id: "x", exercises: [] }) === false);
+  ok("saveSession recusa não-objeto", P.saveSession(null) === false && P.saveSession("x") === false);
+  P.saveSession(s);
+  S.save("session", { id: "x", exercises: "nope" });
+  eq("loadSession de dado corrompido -> null", P.loadSession(), null);
+  const corrupt = { session: "intacto" };
+  const rCorrupt = P.hydrate(corrupt);
+  ok("hydrate ignora sessão corrompida",
+    corrupt.session === "intacto" && rCorrupt.skipped.indexOf("session") !== -1);
+
+  // ---- clearSession: cirúrgico -------------------------------------------
+  P.saveRoutines([{ id: "rA", letter: "A", name: "Peito", exercises: [] }]);
+  P.saveHistory([{ id: 1, name: "Treino antigo", date: "seg, 7:00", duration: "40 min", status: "completed" }]);
+  P.saveSession(s);
+  ok("clearSession remove a sessão", P.clearSession() === true && P.loadSession() === null);
+  ok("clearSession preserva rotinas e histórico",
+    S.has("routines") && S.has("history") && !S.has("session"));
+
+  // ---- reset(): contrato existente + sessão ------------------------------
+  P.saveLang("en");
+  P.savePRs([{ exerciseKey: "C-02", type: "carga", value: 60 }]);
+  P.saveAutoRest(true);
+  P.saveSession(s);
+  ok("reset executa", P.reset() === true);
+  ok("reset limpa a sessão", P.loadSession() === null && !S.has("session"));
+  ok("reset limpa rotinas/histórico/PRs/autoRest",
+    !S.has("routines") && !S.has("history") && !S.has("prs") && !S.has("autoRest"));
+  ok("reset preserva o idioma (contrato existente)", S.load("lang") === "en");
+}
+
+// ---------------------------------------------------------------------------
+// WorkoutController — integração sessão + persistência + histórico (E2)
+// ---------------------------------------------------------------------------
+function testWorkoutController() {
+  const sb = makeSandbox();
+  loadModules(sb, [
+    "js/utils.js", "services/storage.js", "js/i18n.js",
+    "js/workout-session.js", "js/persistence.js", "js/pr.js", "js/workout-controller.js",
+  ]);
+  const C = sb.WorkoutController;
+  const P = sb.Persistence;
+  const WS = sb.WorkoutSession;
+  const PR = sb.PR;
+
+  suite("WorkoutController (integração)");
+
+  const T0 = new Date("2026-10-18T10:00:00.000Z");
+  const T5 = new Date("2026-10-18T10:05:00.000Z");
+  const T15 = new Date("2026-10-18T10:15:00.000Z");
+  const T30 = new Date("2026-10-18T10:30:00.000Z");
+  const routine = {
+    id: "rA", letter: "A", name: "Peito e tríceps",
+    exercises: [
+      { catalogId: "C-02", sets: 2, reps: 12, weight: 60, rest: 60 },
+      { catalogId: "C-01", sets: 1, reps: 10, weight: 40, rest: 60 },
+    ],
+  };
+  const resolve = (id) => ({ name: "Ex " + id, muscle: "Peito", img: "assets/images/peito.jpg" });
+
+  ok("expõe WorkoutController", !!C);
+  ok("module.exports expõe a mesma API",
+    typeof require(path.join(ROOT, "js", "workout-controller.js")).start === "function");
+
+  // ---- start --------------------------------------------------------------
+  const started = C.start(routine, resolve, T0);
+  ok("start cria a sessão", started.ok === true && !!started.session && started.session.status === "active");
+  ok("start persiste de imediato", started.persisted === true && !!P.loadSession());
+  ok("start usa resolve (nome/músculo/imagem)",
+    started.session.exercises[0].name === "Ex C-02" && started.session.exercises[0].img === "assets/images/peito.jpg");
+  const bad = C.start(null, resolve, T0);
+  ok("start sem rotina -> recusa com mensagem",
+    bad.ok === false && bad.reason === "invalid-routine" && bad.message.length > 0 && bad.session === null);
+
+  const s = started.session;
+
+  // ---- completeSet -------------------------------------------------------
+  const c1 = C.completeSet(s, { weight: 60, reps: 12 }, T0);
+  ok("completeSet ok + progresso", c1.ok === true && c1.isFinished === false && c1.progress.completedSets === 1);
+  ok("cada série é persistida", P.loadSession().exercises[0].setsCompleted === 1);
+
+  const badSet = C.completeSet(s, { weight: "abc", reps: 5 }, T0);
+  ok("carga inválida -> recusa clara",
+    badSet.ok === false && badSet.reason === "invalid-set" && badSet.message.length > 0);
+  ok("reps < 1 -> recusa", C.completeSet(s, { weight: 10, reps: 0 }, T0).reason === "invalid-set");
+  ok("recusa não altera nem persiste", s.exercises[0].setsCompleted === 1 && P.loadSession().exercises[0].setsCompleted === 1);
+
+  // ---- navegação ---------------------------------------------------------
+  ok("prev no primeiro -> at-start", C.prev(s).reason === "at-start");
+  ok("next avança e persiste", C.next(s).ok === true && P.loadSession().currentExerciseIndex === 1);
+  ok("next no último -> at-end", C.next(s).reason === "at-end");
+  ok("prev volta", C.prev(s).ok === true && s.currentExerciseIndex === 0);
+
+  // ---- pausa / retomada --------------------------------------------------
+  ok("pause grava o estado pausado", C.pause(s, T5).ok === true && P.loadSession().status === "paused");
+  const restoredPaused = P.loadSession();
+  ok("sessão pausada recuperada íntegra",
+    restoredPaused.status === "paused" && isDateValue(restoredPaused.pausedAt) && restoredPaused.exercises[0].setsCompleted === 1);
+  ok("completeSet em sessão pausada -> not-active",
+    C.completeSet(s, { weight: 10, reps: 10 }, T5).reason === "not-active");
+  ok("resume volta a ativa e acumula a pausa",
+    C.resume(s, T15).ok === true && P.loadSession().status === "active" && P.loadSession().pausedMs === 10 * 60000);
+  eq("duração desconta a pausa", C.elapsedMs(s, T15), 5 * 60000);
+
+  // ---- discriminação de recusas na sessão finalizada ---------------------
+  const fin = C.finish(s, T30);
+  ok("finish encerra a sessão", fin.ok === true && s.status === "finished" && s.isFinished === true);
+  ok("finish limpa a persistência", P.loadSession() === null);
+  ok("finish é idempotente",
+    C.finish(s, new Date("2026-10-18T11:00:00.000Z")).ok === true &&
+      s.finishedAt.getTime() === T30.getTime() && P.loadSession() === null);
+  ok("completeSet/pause/resume após finalizar -> not-active",
+    C.completeSet(s, { weight: 1, reps: 1 }).reason === "not-active" &&
+      C.pause(s).reason === "not-active" && C.resume(s).reason === "not-active");
+  ok("next/prev após finalizar -> not-active", C.next(s).reason === "not-active" && C.prev(s).reason === "not-active");
+  ok("sem sessão -> no-session",
+    C.completeSet(null).reason === "no-session" && C.save(null).reason === "no-session" &&
+      C.finish(null).reason === "no-session" && C.next(null).reason === "no-session");
+
+  // ---- descarte ----------------------------------------------------------
+  const d = C.start(routine, resolve, T0).session;
+  ok("clear descarta a sessão persistida", C.clear().ok === true && P.loadSession() === null);
+  ok("sessão descartada segue utilizável em memória (progresso intacto)",
+    d.status === "active" && WS.progress(d).percent === 0);
+
+  // ---- histórico: identidade estável + idempotência ----------------------
+  const h0 = C.start(routine, resolve, T0).session;
+  C.completeSet(h0, { weight: 60, reps: 12 }, T0);
+  C.completeSet(h0, { weight: 62.5, reps: 10 }, T0);
+  C.pause(h0, T5);
+  C.resume(h0, T15);
+  C.completeSet(h0, { weight: 40, reps: 10 }, T30);
+  ok("fluxo real conclui a sessão", h0.status === "finished" && WS.progress(h0).percent === 100);
+  ok("sessão concluída continua recuperável até confirmar o histórico",
+    P.loadSession() !== null && P.loadSession().status === "finished");
+
+  const entry = C.buildHistoryEntry(h0, "completed", T30);
+  ok("entrada guarda a identidade ESTÁVEL da execução em sessionId",
+    entry.sessionId === h0.id);
+  ok("id da entrada continua NUMÉRICO (contrato legado preservado)",
+    typeof entry.id === "number" && entry.id > 0);
+  ok("entrada mantém o formato do histórico atual",
+    entry.name === "Treino A — Peito e tríceps" && entry.routineId === "rA" && entry.letter === "A" &&
+      entry.status === "completed" && /^\d{4}-\d{2}-\d{2}$/.test(entry.dateISO));
+  ok("entrada guarda as séries efetivamente concluídas",
+    entry.exercises.length === 2 && entry.exercises[0].sets.length === 2 &&
+      entry.exercises[0].sets[1].weight === 62.5 && entry.exercises[1].sets.length === 1);
+  eq("duração usa elapsedMs (30min - 10min de pausa)", entry.durationMin, 20);
+  eq("duração formatada", entry.duration, "20 min");
+  ok("sessão sem séries e status partial não gera entrada",
+    C.buildHistoryEntry(WS.create(routine, T0, { resolve: resolve }), "partial", T0) === null);
+  ok("status inválido não gera entrada", C.buildHistoryEntry(h0, "x", T30) === null);
+
+  // Simula exatamente o fluxo da UI: controlador -> PR -> Persistence.
+  function saveToHistory(history, session, status, now) {
+    const res = C.appendToHistory(history, session, status, now);
+    if (!res.ok) return res;
+    const newPRs = PR.checkNewPR(res.entry, res.history);
+    if (newPRs.length > 0) res.entry.prs = newPRs.map((p) => ({ type: p.type, value: p.value }));
+    P.saveHistory(res.history);
+    return res;
+  }
+
+  let history = [];
+  const first = saveToHistory(history, h0, "completed", T30);
+  history = first.history;
+  ok("grava no histórico com a identidade da execução",
+    first.ok === true && history.length === 1 && history[0].sessionId === h0.id);
+  ok("dedupe não depende de id numérico (usa sessionId)",
+    C.hasHistoryEntry([{ id: 123, sessionId: h0.id }], h0) === true);
+  ok("entrada legada (sem sessionId) não é confundida com a execução",
+    C.hasHistoryEntry([{ id: 123, name: "Antigo" }], h0) === false);
+  const prsAfterFirst = P.loadPRs().length;
+  ok("motor de PRs registra os critérios por exercício", prsAfterFirst === 12, String(prsAfterFirst));
+  ok("cada exercício rende os 6 critérios",
+    P.loadPRs().filter((p) => p.exerciseKey === "C-02").length === 6 &&
+      P.loadPRs().filter((p) => p.exerciseKey === "C-01").length === 6);
+  ok("workoutId do PR continua sendo o id NUMÉRICO da entrada (contrato do motor)",
+    P.loadPRs().every((p) => p.workoutId === first.entry.id && typeof p.workoutId === "number"));
+
+  // Finalização repetida na MESMA execução.
+  const again = saveToHistory(history, h0, "completed", T30);
+  ok("finalização repetida não duplica histórico",
+    again.ok === false && again.reason === "duplicate-history" && history.length === 1);
+  ok("finalização repetida não duplica PRs", P.loadPRs().length === prsAfterFirst);
+
+  // Simula RECARGA: hidrata do disco e reprocessa.
+  const reloadTarget = { routines: [], history: [], session: null, lang: "pt", autoRestEnabled: true };
+  P.hydrate(reloadTarget);
+  ok("RELOAD: histórico restaurado com a identidade da execução",
+    reloadTarget.history.length === 1 && reloadTarget.history[0].sessionId === h0.id);
+  ok("RELOAD: id numérico e sessionId sobrevivem ao round-trip",
+    typeof reloadTarget.history[0].id === "number" && reloadTarget.history[0].sessionId === h0.id);
+  ok("RELOAD: sessão recuperada com a mesma identidade",
+    !!reloadTarget.session && reloadTarget.session.id === h0.id);
+  const prsBeforeReload = P.loadPRs().length;
+  ok("RELOAD: reprocessar o PR não duplica recordes",
+    PR.checkNewPR(reloadTarget.history[0], reloadTarget.history).length === 0 &&
+      P.loadPRs().length === prsBeforeReload);
+  const afterReload = C.appendToHistory(reloadTarget.history, reloadTarget.session, "completed", T30);
+  ok("RELOAD: não entra duas vezes no histórico",
+    afterReload.ok === false && afterReload.reason === "duplicate-history" &&
+      afterReload.duplicated === true && afterReload.history.length === 1);
+
+  // ---- descartar/finalizar não destroem o resto ---------------------------
+  const routinesBefore = [
+    { id: "rZ", letter: "Z", name: "Custom", exercises: [{ catalogId: "ex1", sets: 5, reps: 8, weight: 12.5, rest: 90 }] },
+  ];
+  P.saveRoutines(routinesBefore);
+  const historyBefore = P.loadPRs().length;
+  const alive = C.start(routine, resolve, T0).session;
+  C.clear();
+  const t = { routines: null, history: null, session: null, lang: "pt", autoRestEnabled: true };
+  P.hydrate(t);
+  ok("descartar preserva rotinas (inclusive exercício personalizado)",
+    t.routines.length === 1 && t.routines[0].exercises[0].catalogId === "ex1" && t.routines[0].exercises[0].weight === 12.5);
+  ok("descartar preserva histórico", Array.isArray(t.history) && t.history.length === 1 && t.history[0].sessionId === h0.id);
+  ok("descartar preserva PRs", P.loadPRs().length === historyBefore);
+  ok("descartar remove só a sessão", t.session === null && alive.status === "active");
+
+  // ---- sessão com exercício personalizado (sem catalogId no catálogo) -----
+  const custom = C.start({
+    id: "rZ", letter: "Z", name: "Custom",
+    exercises: [{ catalogId: "ex1", name: "Exercício custom", sets: 2, reps: 8, weight: 12.5, rest: 60 }],
+  }, null, T0).session;
+  ok("sessão de exercício personalizado preserva o nome",
+    custom.exercises[0].name === "Exercício custom" && custom.exercises[0].catalogId === "ex1");
+  ok("exercício personalizado sobrevive ao round-trip",
+    P.loadSession().exercises[0].name === "Exercício custom" && P.loadSession().exercises[0].weight === 12.5);
+
+  // ---- regressão do consumidor legado de `id` -----------------------------
+  // js/pr.js (weeklyStreak) faz `new Date(h.id)` quando a entrada NÃO tem
+  // dateISO. Como o id da entrada continua numérico, esse caminho segue vivo.
+  const legacyEntry = {
+    id: Date.now(), name: "Treino legado (sem dateISO)", date: "x", duration: "10 min",
+    status: "completed",
+    exercises: [{ catalogId: "C-99", name: "Exercício legado", muscle: "Peito", sets: [{ weight: 80, reps: 10 }] }],
+  };
+  const legacyPRs = PR.checkNewPR(legacyEntry, [legacyEntry]);
+  ok("consumidor legado (weeklyStreak via id numérico) continua funcionando",
+    legacyPRs.some((p) => p.type === "weeklyStreak" && p.value === 1),
+    JSON.stringify(legacyPRs.map((p) => p.type)));
+}
+
+// ---------------------------------------------------------------------------
 // Wiring estático do HTML
 // ---------------------------------------------------------------------------
 function testWiring() {
@@ -944,7 +1287,7 @@ function testWiring() {
 
   const html = fs.readFileSync(path.join(ROOT, "TreinoTracker_DeepSeek.html"), "utf8");
 
-  const order = ["js/utils.js", "services/storage.js", "js/i18n.js", "js/data/exercises.js", "js/catalog.js", "js/events.js", "js/routine-actions.js", "js/pr.js"].map((src) => ({
+  const order = ["js/utils.js", "services/storage.js", "js/i18n.js", "js/data/exercises.js", "js/catalog.js", "js/events.js", "js/routine-actions.js", "js/pr.js", "js/workout-session.js", "js/workout-controller.js"].map((src) => ({
     src,
     at: html.indexOf('src="' + src + '"'),
   }));
@@ -969,7 +1312,22 @@ function testWiring() {
   ok("exclusão usa RoutineActions + persistência existente",
     html.includes("RoutineActions.deleteRoutine(") && html.includes("Persistence.saveRoutines("));
   ok("botão de exclusão (−) no card da rotina", html.includes("askDeleteRoutine('${r.id}')") && html.includes("btn-minus"));
-  ok("histórico enriquecido grava séries concluídas", html.includes("completedSets.push(") && html.includes("dateISO"));
+  // Sprint 4: as séries concluídas passaram a ser registradas pelo DOMÍNIO
+  // (WorkoutSession.completeSet) e a entrada de histórico é montada pelo
+  // CONTROLADOR (que passou a deter `dateISO`/duração).
+  const sessionSrc = fs.readFileSync(path.join(ROOT, "js", "workout-session.js"), "utf8");
+  const controllerSrc = fs.readFileSync(path.join(ROOT, "js", "workout-controller.js"), "utf8");
+  ok("histórico enriquecido grava séries concluídas",
+    sessionSrc.includes("completedSets.push(") && controllerSrc.includes("dateISO") &&
+      html.includes("WorkoutController.appendToHistory("));
+  ok("Player usa o domínio + controlador da sessão",
+    html.includes("WorkoutController.start(") && html.includes("WorkoutController.completeSet(") &&
+      html.includes("js/workout-session.js") && html.includes("js/workout-controller.js"));
+  ok("sessão recuperada tem fluxo de retomar/descartar",
+    html.includes('id="resume-modal"') && html.includes("function resumeRestoredSession") &&
+      html.includes("function discardRestoredSession") && html.includes("showResumePrompt()"));
+  ok("persistência da sessão centralizada no controlador",
+    html.includes("WorkoutController.clear()") && !/Persistence\.saveSession\(/.test(html));
   ok("PR integrado ao salvar treino", html.includes("PR.checkNewPR("));
 
   const homeBlock = html.match(/<section id="screen-home"[\s\S]*?<\/section>/)[0];
@@ -993,6 +1351,8 @@ testCatalog();
 testPR();
 testRoutineActions();
 testWorkoutSession();
+testPersistenceSession();
+testWorkoutController();
 testWiring();
 
 console.log("\n==========================================");
