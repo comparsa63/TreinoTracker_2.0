@@ -36,10 +36,26 @@
  * Mensagens em pt-BR, como em `RoutineActions` (o app já usa strings pt-BR
  * diretas em toasts/modais e o dicionário i18n é fechado por chave).
  *
- * ÔNUS DE ESCOPO: NÃO inicia RestTimer nem Wake Lock (etapas seguintes).
+ * ÔNUS DE ESCOPO: integra o DESCANSO (js/rest-timer.js, E3) sem persistir e
+ * sem renderizar — o ticker, o overlay e os botões do timer continuam sendo
+ * responsabilidade da UI (E5). Wake Lock não passa por aqui.
  *
- * Depende de: js/workout-session.js (domínio), js/persistence.js (chave
- * `session`), js/utils.js (TTUtils). Nenhum acesso a DOM.
+ * DESCANSO (E3) — o descanso é EFÊMERO por decisão de produto (D-A):
+ *   restStart(session, seconds, now)  -> cria um timer vinculado à execução
+ *   restSnapshot(timer, now)         -> leitura calculada (sem efeito colateral)
+ *   restPause/restResume(timer, now, session?)
+ *   restAdd(timer, ms, now, session?)   restRestart(timer, now, seconds?, session?)
+ *   restSkip/restSettle(timer, now, session?)
+ *   restSync(timer, session, now)    -> alinha o descanso ao estado da sessão
+ * As operações MUTANTES conferem o VÍNCULO (`timer.sessionId` x execução atual)
+ * para impedir que o descanso de um treino seja aplicado a outro. Nenhuma
+ * função daqui persiste, cria timers de render ou toca o DOM; o objeto do
+ * descanso pertence a quem chamou (holder da UI, montado na E5). A pausa do
+ * descanso NÃO entra no cômputo de `elapsedMs` da sessão.
+ *
+ * Depende de: js/workout-session.js (domínio), js/rest-timer.js (descanso,
+ * opcional/defensivo), js/persistence.js (chave `session`), js/utils.js
+ * (TTUtils). Nenhum acesso a DOM.
  */
 (function (global) {
   "use strict";
@@ -61,6 +77,10 @@
     "no-storage": "Não foi possível gravar a sessão de treino.",
     "duplicate-history": "Este treino já foi registrado no histórico.",
     "empty-history": "Nenhuma série concluída para salvar.",
+    "no-rest": "Não há descanso em andamento.",
+    "invalid-rest": "Não foi possível iniciar o descanso com essa duração.",
+    "rest-other-session": "Este descanso pertence a outro treino.",
+    "rest-state": "O descanso não está em um estado que permita esta ação.",
   };
 
   // -------------------------------------------------------------------------
@@ -77,6 +97,11 @@
 
   function utils() {
     return global.TTUtils || null;
+  }
+
+  /** Domínio do descanso (js/rest-timer.js). Opcional: carga defensiva. */
+  function restTimer() {
+    return global.RestTimer || null;
   }
 
   function fail(reason, message, session) {
@@ -131,6 +156,46 @@
     if (typeof id === "string" && id.trim() !== "") return id.trim();
     if (typeof id === "number" && isFinite(id)) return String(id);
     return null;
+  }
+
+  // -------------------------------------------------------------------------
+  // Helpers do DESCANSO (E3)
+  // -------------------------------------------------------------------------
+
+  function isTimerObject(timer) {
+    return !!(timer && typeof timer === "object" && !Array.isArray(timer));
+  }
+
+  /**
+   * O descanso pertence à execução informada?
+   * Um timer SEM `sessionId` é aceito (criado fora do vínculo e ainda não
+   * amarrado); um timer COM `sessionId` só serve para a própria execução —
+   * é isso que impede o descanso de um treino vazar para outro. Sessão sem
+   * identidade estável não consegue atestar vínculo: recusa.
+   */
+  function restBound(timer, session) {
+    const key = sessionKey(session);
+    if (!key) return false;
+    const owner = timer && typeof timer.sessionId === "string" ? timer.sessionId : null;
+    return !owner || owner === key;
+  }
+
+  /**
+   * Aplica uma operação PURA do domínio do descanso com as guardas da camada:
+   * módulo carregado, timer válido e vínculo com a execução (quando informada).
+   * @returns {{ok:boolean, reason:string|null, message:string, session:Object|null,
+   *            timer:Object|null}}
+   */
+  function restOp(name, timer, args, session) {
+    const R = restTimer();
+    if (!R) return fail("unavailable");
+    if (!isTimerObject(timer)) return fail("no-rest", MESSAGES["no-rest"], session);
+    if (session && !restBound(timer, session)) {
+      return fail("rest-other-session", MESSAGES["rest-other-session"], session);
+    }
+    const out = R[name].apply(R, [timer].concat(args));
+    if (!out) return fail("rest-state", MESSAGES["rest-state"], session);
+    return done(session, { timer: out });
   }
 
   // -------------------------------------------------------------------------
@@ -291,6 +356,92 @@
       const res = done(session, { elapsedMs: W.elapsedMs(session, now) });
       res.cleared = WorkoutController.clear().ok;
       return res;
+    },
+
+    // -----------------------------------------------------------------------
+    // DESCANSO entre séries (E3) — efêmero, sem persistência e sem render
+    // -----------------------------------------------------------------------
+
+    /**
+     * Cria um descanso VINCULADO à execução. Nada é persistido (D-A).
+     * Recusa quando não há sessão (não há descanso sem treino) ou quando a
+     * execução não tem identidade estável para amarrar o vínculo.
+     * @returns {{ok:boolean, reason:string|null, message:string,
+     *            session:Object|null, timer:Object|null}}
+     */
+    restStart(session, seconds, now) {
+      const R = restTimer();
+      if (!R) return fail("unavailable");
+      if (!session) return fail("no-session", MESSAGES["no-session"]);
+      const key = sessionKey(session);
+      if (!key) return fail("invalid-session", MESSAGES["invalid-session"], session);
+      const timer = R.create(seconds, key, now);
+      if (!timer) return fail("invalid-rest", MESSAGES["invalid-rest"], session);
+      return done(session, { timer: timer });
+    },
+
+    /**
+     * Estado CALCULADO do descanso num instante. Leitura pura: não muta o
+     * timer, não persiste e não cria ticker. `rest.finished` também fica true
+     * quando o prazo venceu durante a suspensão da aba, mas o status ainda é
+     * `running` — quem decide encerrar é o chamador (`restSettle`).
+     */
+    restSnapshot(timer, now) {
+      const R = restTimer();
+      if (!R) return fail("unavailable");
+      if (!isTimerObject(timer)) return fail("no-rest", MESSAGES["no-rest"]);
+      const rest = R.snapshot(timer, now);
+      if (!rest) return fail("rest-state", MESSAGES["rest-state"]);
+      return done(null, { timer: timer, rest: rest });
+    },
+
+    /** Congela o descanso (junto com a pausa da sessão — D-C). */
+    restPause(timer, now, session) {
+      return restOp("pause", timer, [now], session);
+    },
+
+    /** Retoma o descanso do tempo congelado (junto com a sessão — D-C). */
+    restResume(timer, now, session) {
+      return restOp("resume", timer, [now], session);
+    },
+
+    /** Soma (ou subtrai, com valor negativo) tempo ao descanso. */
+    restAdd(timer, milliseconds, now, session) {
+      return restOp("addTime", timer, [milliseconds, now], session);
+    },
+
+    /** Reinicia a contagem do zero (duração atual, ou a informada). */
+    restRestart(timer, now, seconds, session) {
+      return restOp("restart", timer, [now, seconds], session);
+    },
+
+    /** Encerra o descanso imediatamente (idempotente no domínio). */
+    restSkip(timer, now, session) {
+      return restOp("skip", timer, [now], session);
+    },
+
+    /** Aplica `finished` quando o prazo do descanso já venceu (idempotente). */
+    restSettle(timer, now, session) {
+      return restOp("settle", timer, [now], session);
+    },
+
+    /**
+     * Alinha o descanso ao estado REAL da sessão (pausada -> pausa, ativa ->
+     * retoma, finalizada -> encerra). É o ponto único de integração que a E5
+     * chamará em `pauseWorkout`/`resumeWorkout`. Exige a sessão: sem ela não
+     * há estado a alinhar nem vínculo a conferir.
+     */
+    restSync(timer, session, now) {
+      const R = restTimer();
+      if (!R) return fail("unavailable");
+      if (!session) return fail("no-session", MESSAGES["no-session"]);
+      if (!isTimerObject(timer)) return fail("no-rest", MESSAGES["no-rest"], session);
+      if (!restBound(timer, session)) {
+        return fail("rest-other-session", MESSAGES["rest-other-session"], session);
+      }
+      const out = R.alignToSession(timer, session.status, now);
+      if (!out) return fail("rest-state", MESSAGES["rest-state"], session);
+      return done(session, { timer: out });
     },
 
     // -----------------------------------------------------------------------

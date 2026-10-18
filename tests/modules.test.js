@@ -1073,7 +1073,7 @@ function testWorkoutController() {
   const sb = makeSandbox();
   loadModules(sb, [
     "js/utils.js", "services/storage.js", "js/i18n.js",
-    "js/workout-session.js", "js/persistence.js", "js/pr.js", "js/workout-controller.js",
+    "js/workout-session.js", "js/rest-timer.js", "js/persistence.js", "js/pr.js", "js/workout-controller.js",
   ]);
   const C = sb.WorkoutController;
   const P = sb.Persistence;
@@ -1280,6 +1280,333 @@ function testWorkoutController() {
 }
 
 // ---------------------------------------------------------------------------
+// RestTimer — domínio puro do descanso (E3)
+// ---------------------------------------------------------------------------
+function testRestTimer() {
+  const sb = makeSandbox();
+  loadModules(sb, ["js/rest-timer.js"]);
+  const R = sb.RestTimer;
+
+  suite("RestTimer (domínio do descanso)");
+
+  const BASE = Date.parse("2026-10-18T10:00:00.000Z");
+  const at = (offsetMs) => new Date(BASE + offsetMs);
+  const SEC = 1000;
+  const MIN = 60000;
+
+  ok("expõe RestTimer", !!R);
+  ok("module.exports expõe a mesma API",
+    typeof require(path.join(ROOT, "js", "rest-timer.js")).create === "function");
+  eq("STATUS canônico", R.STATUS, ["running", "paused", "finished"]);
+
+  // ---- isolamento (regras 6, 7 e 8) ---------------------------------------
+  const src = fs.readFileSync(path.join(ROOT, "js", "rest-timer.js"), "utf8");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  ok("não cria timers (sem setInterval/setTimeout/rAF)",
+    !/setInterval|setTimeout|requestAnimationFrame|clearInterval|clearTimeout/.test(code));
+  ok("não acessa DOM nem global de janela",
+    !/\bdocument\b|\bwindow\b/.test(code));
+  ok("não acessa storage, Persistence, EventBus nem StorageService",
+    !/\blocalStorage\b|\bsessionStorage\b|\bPersistence\b|\bEventBus\b|\bStorageService\b/.test(code));
+
+  // ---- create -------------------------------------------------------------
+  const t = R.create(60, "s_1", at(0));
+  ok("create fabrica um descanso correndo",
+    !!t && t.status === "running" && t.durationMs === 60 * SEC && t.sessionId === "s_1");
+  ok("create grava o prazo absoluto (endsAt) e não guarda remainingMs",
+    isDateValue(t.endsAt) && t.endsAt.getTime() === BASE + 60 * SEC && t.remainingMs === null);
+  ok("create sem duração válida -> null",
+    R.create(0, "s_1", at(0)) === null && R.create(-5, "s_1", at(0)) === null &&
+      R.create("abc", "s_1", at(0)) === null && R.create(null, "s_1", at(0)) === null);
+  ok("create aceita duração como string numérica", (R.create("90", "s_1", at(0)) || {}).durationMs === 90 * SEC);
+  ok("create sem sessionId devolve vínculo nulo (não inventa identidade)",
+    R.create(60, "   ", at(0)).sessionId === null && R.create(60, null, at(0)).sessionId === null);
+
+  // ---- snapshot: início e avanço de tempo ---------------------------------
+  const snap0 = R.snapshot(t, at(0));
+  ok("snapshot inicial: restante = duração, progresso 0",
+    snap0.remainingMs === 60 * SEC && snap0.elapsedMs === 0 && snap0.progress === 0 && snap0.finished === false);
+  const snap30 = R.snapshot(t, at(30 * SEC));
+  ok("snapshot a 30s: restante e progresso corretos",
+    snap30.remainingMs === 30 * SEC && snap30.elapsedMs === 30 * SEC && snap30.progress === 0.5 && snap30.finished === false);
+  ok("snapshot não muta o timer (leitura pura)",
+    t.status === "running" && t.remainingMs === null && t.endsAt.getTime() === BASE + 60 * SEC);
+
+  // ---- expiração: no limite e depois --------------------------------------
+  const snapEnd = R.snapshot(t, at(60 * SEC));
+  ok("no limite de endsAt: restante 0, progresso 1, finished",
+    snapEnd.remainingMs === 0 && snapEnd.progress === 1 && snapEnd.finished === true && snapEnd.status === "running");
+  const snapLate = R.snapshot(t, at(60 * SEC + 1));
+  ok("após o prazo: restante não fica negativo", snapLate.remainingMs === 0 && snapLate.finished === true);
+
+  // ---- suspensão prolongada da aba ---------------------------------------
+  const susp = R.create(30, "s_1", at(0));
+  const snapSusp = R.snapshot(susp, at(10 * MIN));
+  ok("SUSPENSÃO: 10 min com 30 s restantes encerra (não devolve 30 s)",
+    snapSusp.remainingMs === 0 && snapSusp.finished === true);
+  const settledSusp = R.settle(susp, at(10 * MIN));
+  ok("SUSPENSÃO: settle reconhece o término", settledSusp.status === "finished" && settledSusp.remainingMs === 0);
+
+  // ---- settle -------------------------------------------------------------
+  const sess = R.create(60, "s_1", at(0));
+  ok("settle antes do prazo não encerra",
+    R.settle(sess, at(59 * SEC)).status === "running" && R.snapshot(sess, at(59 * SEC)).remainingMs === SEC);
+  ok("settle após o prazo encerra", R.settle(sess, at(60 * SEC)).status === "finished");
+  ok("settle é IDEMPOTENTE",
+    R.settle(sess, at(10 * MIN)) === sess && sess.status === "finished" && sess.remainingMs === 0);
+  ok("settle em timer inválido -> null", R.settle(null, at(0)) === null && R.settle({}, at(0)) === null);
+  ok("settle não encerra timer pausado (pausa congela de propósito)",
+    R.settle(R.pause(R.create(60, "s_1", at(0)), at(10 * SEC)), at(10 * MIN)).status === "paused");
+
+  // ---- pausa / retomada ---------------------------------------------------
+  const p = R.create(60, "s_1", at(0));
+  ok("pause congela o restante", R.pause(p, at(20 * SEC)).status === "paused" && p.remainingMs === 40 * SEC);
+  ok("pause troca a autoridade para remainingMs (endsAt deixa de valer)",
+    p.endsAt === null && isDateValue(p.pausedAt) && p.pausedAt.getTime() === BASE + 20 * SEC);
+  ok("TIMER PAUSADO NÃO CONSOME TEMPO (20 min depois, ainda 40 s)",
+    R.snapshot(p, at(20 * MIN)).remainingMs === 40 * SEC &&
+      R.snapshot(p, at(20 * MIN)).progress === (20 * SEC) / (60 * SEC));
+  ok("pause repetido é no-op idempotente (não reinicia pausedAt)",
+    R.pause(p, at(5 * MIN)) === p && p.pausedAt.getTime() === BASE + 20 * SEC && p.remainingMs === 40 * SEC);
+  ok("resume recalcula o prazo absoluto",
+    R.resume(p, at(20 * MIN)) === p && p.status === "running" && p.endsAt.getTime() === BASE + 20 * MIN + 40 * SEC);
+  ok("resume acumula o tempo pausado", p.pausedMs === 20 * MIN - 20 * SEC);
+  ok("após resume o restante continua de onde parou",
+    R.snapshot(p, at(20 * MIN + 10 * SEC)).remainingMs === 30 * SEC);
+  ok("resume em timer correndo é no-op",
+    R.resume(p, at(20 * MIN + 10 * SEC)).endsAt.getTime() === BASE + 20 * MIN + 40 * SEC);
+  ok("pause/resume em timer finalizado -> recusa",
+    R.pause(R.skip(R.create(60, "s_1", at(0)), at(0)), at(0)) === null &&
+      R.resume(R.skip(R.create(60, "s_1", at(0)), at(0)), at(0)) === null);
+
+  // ---- addTime ------------------------------------------------------------
+  const add = R.create(60, "s_1", at(0));
+  ok("addTime positivo estende o prazo",
+    R.addTime(add, 30 * SEC, at(10 * SEC)) === add &&
+      R.snapshot(add, at(10 * SEC)).remainingMs === 80 * SEC);
+  ok("addTime negativo encurta o prazo",
+    R.snapshot(R.addTime(add, -60 * SEC, at(10 * SEC)), at(10 * SEC)).remainingMs === 20 * SEC);
+  const zeroed = R.addTime(R.create(60, "s_1", at(0)), -10 * MIN, at(10 * SEC));
+  ok("addTime NUNCA deixa tempo negativo",
+    zeroed.endsAt.getTime() === BASE + 10 * SEC &&
+      R.snapshot(zeroed, at(10 * SEC)).remainingMs === 0 && R.snapshot(zeroed, at(10 * SEC)).finished === true);
+  ok("addTime não reduz a duração planejada (anel de progresso)", zeroed.durationMs === 60 * SEC);
+  const inflated = R.addTime(R.create(60, "s_1", at(0)), 2 * MIN, at(10 * SEC));
+  ok("addTime acima do planejado infla a duração (progresso segue em 0..1)",
+    inflated.durationMs === 170 * SEC && R.snapshot(inflated, at(10 * SEC)).progress === 0);
+  const addPaused = R.pause(R.create(60, "s_1", at(0)), at(10 * SEC));
+  ok("addTime em timer pausado ajusta o restante congelado",
+    R.addTime(addPaused, 30 * SEC, at(MIN)).remainingMs === 80 * SEC &&
+      R.snapshot(addPaused, at(10 * MIN)).remainingMs === 80 * SEC);
+  ok("addTime em timer finalizado -> recusa",
+    R.addTime(R.skip(R.create(60, "s_1", at(0)), at(0)), 10 * SEC, at(0)) === null);
+  ok("addTime com valor não numérico -> recusa",
+    R.addTime(R.create(60, "s_1", at(0)), "abc", at(0)) === null);
+
+  // ---- restart ------------------------------------------------------------
+  const r2 = R.pause(R.create(90, "s_1", at(0)), at(30 * SEC));
+  R.resume(r2, at(40 * SEC));
+  ok("restart reinicia do zero com a MESMA duração",
+    R.restart(r2, at(5 * MIN)) === r2 && r2.status === "running" &&
+      r2.durationMs === 90 * SEC && R.snapshot(r2, at(5 * MIN)).remainingMs === 90 * SEC);
+  ok("restart zera as pausas acumuladas", r2.pausedMs === 0 && r2.pausedAt === null && r2.remainingMs === null);
+  ok("restart preserva o vínculo da execução", r2.sessionId === "s_1");
+  ok("restart com nova duração adota o valor",
+    R.snapshot(R.restart(r2, at(5 * MIN), 45), at(5 * MIN)).remainingMs === 45 * SEC);
+  ok("restart repetido é estável",
+    R.restart(r2, at(6 * MIN)) === r2 && R.snapshot(r2, at(6 * MIN)).remainingMs === 45 * SEC);
+  ok("restart em timer inválido -> null", R.restart(null, at(0)) === null);
+
+  // ---- skip ---------------------------------------------------------------
+  const sk = R.create(60, "s_1", at(0));
+  ok("skip encerra imediatamente", R.skip(sk, at(5 * SEC)) === sk && sk.status === "finished" && sk.remainingMs === 0);
+  ok("skip é IDEMPOTENTE", R.skip(sk, at(60 * SEC)) === sk && sk.status === "finished" && sk.remainingMs === 0);
+  const skPaused = R.pause(R.create(60, "s_1", at(0)), at(10 * SEC));
+  ok("skip em timer pausado também encerra", R.skip(skPaused, at(MIN)).status === "finished");
+  ok("skip em timer inválido -> null", R.skip(null, at(0)) === null);
+
+  // ---- sanitize -----------------------------------------------------------
+  ok("sanitize descarta lixo",
+    R.sanitize(null, at(0)) === null && R.sanitize([], at(0)) === null &&
+      R.sanitize({}, at(0)) === null && R.sanitize({ durationMs: 0 }, at(0)) === null &&
+      R.sanitize({ durationMs: "abc" }, at(0)) === null && R.sanitize("x", at(0)) === null);
+  const sRun = R.sanitize({ durationMs: 60000, endsAt: at(30 * SEC).toISOString(), sessionId: "s_9" }, at(0));
+  ok("sanitize reconstrói um descanso correndo (ISO date)",
+    sRun.status === "running" && isDateValue(sRun.endsAt) && sRun.sessionId === "s_9" && sRun.remainingMs === null);
+  const sRunNoEnd = R.sanitize({ durationMs: 60000, status: "running" }, at(0));
+  ok("sanitize deriva endsAt quando falta o prazo",
+    isDateValue(sRunNoEnd.endsAt) && sRunNoEnd.endsAt.getTime() === BASE + 60 * SEC);
+  const sPaused = R.sanitize({ durationMs: 60000, remainingMs: 30000 }, at(0));
+  ok("sanitize DERIVA 'paused' de remainingMs e carimba pausedAt",
+    sPaused.status === "paused" && sPaused.remainingMs === 30000 && sPaused.endsAt === null && isDateValue(sPaused.pausedAt));
+  ok("sanitize aceita status explícito 'finished'",
+    R.sanitize({ durationMs: 60000, status: "finished" }, at(0)).remainingMs === 0);
+  const sScrub = R.sanitize({
+    durationMs: "60000", status: "paused", remainingMs: "30000", pausedMs: -5, sessionId: "  s_9  ",
+  }, at(0));
+  ok("sanitize normaliza strings, clampa pausas e limpa o vínculo",
+    sScrub.durationMs === 60000 && sScrub.remainingMs === 30000 && sScrub.pausedMs === 0 && sScrub.sessionId === "s_9");
+  ok("sanitize mantém o progresso coerente (duração >= restante)",
+    R.sanitize({ durationMs: 60000, status: "paused", remainingMs: 90000 }, at(0)).durationMs === 90000);
+  ok("sanitize rejeita status desconhecido sem dado derivável",
+    R.sanitize({ durationMs: 60000, status: "corrompido" }, at(0)) === null);
+  const roundTrip = R.sanitize(JSON.parse(JSON.stringify(R.create(60, "s_1", at(0)))), at(10 * SEC));
+  ok("sanitize sobrevive ao round-trip JSON",
+    roundTrip.status === "running" && R.snapshot(roundTrip, at(10 * SEC)).remainingMs === 50 * SEC);
+
+  // ---- alignToSession -----------------------------------------------------
+  ok("alignToSession: sessão pausada pausa o descanso",
+    R.alignToSession(R.create(60, "s_1", at(0)), "paused", at(10 * SEC)).status === "paused");
+  ok("alignToSession: sessão ativa retoma o descanso",
+    R.alignToSession(R.pause(R.create(60, "s_1", at(0)), at(10 * SEC)), "active", at(MIN)).status === "running");
+  ok("alignToSession: sessão finalizada encerra o descanso",
+    R.alignToSession(R.create(60, "s_1", at(0)), "finished", at(10 * SEC)).status === "finished");
+  ok("alignToSession: descanso já finalizado é ignorado",
+    R.alignToSession(R.skip(R.create(60, "s_1", at(0)), at(0)), "paused", at(MIN)).status === "finished");
+  ok("alignToSession: status desconhecido não altera nada",
+    R.alignToSession(R.create(60, "s_1", at(0)), "bogus", at(10 * SEC)).status === "running");
+  ok("alignToSession em timer inválido -> null", R.alignToSession(null, "paused", at(0)) === null);
+  ok("alignToSession: retomada após pausa da sessão não consome tempo",
+    (() => {
+      const x = R.alignToSession(R.create(60, "s_1", at(0)), "paused", at(10 * SEC));
+      R.alignToSession(x, "active", at(10 * MIN));
+      return R.snapshot(x, at(10 * MIN)).remainingMs === 50 * SEC;
+    })());
+}
+
+// ---------------------------------------------------------------------------
+// WorkoutController — integração do descanso (E3)
+// ---------------------------------------------------------------------------
+function testWorkoutControllerRest() {
+  const sb = makeSandbox();
+  loadModules(sb, [
+    "js/utils.js", "services/storage.js", "js/i18n.js", "js/workout-session.js",
+    "js/rest-timer.js", "js/persistence.js", "js/pr.js", "js/workout-controller.js",
+  ]);
+  const C = sb.WorkoutController;
+  const R = sb.RestTimer;
+
+  suite("WorkoutController (descanso / E3)");
+
+  const BASE = Date.parse("2026-10-18T10:00:00.000Z");
+  const at = (offsetMs) => new Date(BASE + offsetMs);
+  const SEC = 1000;
+  const MIN = 60000;
+
+  const routine = {
+    id: "rA", letter: "A", name: "Peito e tríceps",
+    exercises: [{ catalogId: "C-02", sets: 2, reps: 12, weight: 60, rest: 60 }],
+  };
+  const resolve = (id) => ({ name: "Ex " + id, muscle: "Peito", img: "assets/images/peito.jpg" });
+
+  ok("módulo exposto no sandbox de integração", !!R && typeof R.create === "function");
+
+  const session = C.start(routine, resolve, at(0)).session;
+  const persistedBefore = JSON.stringify(sb.Persistence.loadSession());
+  ok("sessão iniciada e persistida (pré-descanso)", persistedBefore.length > 10);
+
+  // ---- guardas ------------------------------------------------------------
+  ok("restStart sem sessão -> no-session", C.restStart(null, 60, at(0)).reason === "no-session");
+  ok("restStart com sessão sem identidade estável -> invalid-session",
+    C.restStart({ status: "active" }, 60, at(0)).reason === "invalid-session");
+  ok("restStart com duração inválida -> invalid-rest",
+    C.restStart(session, 0, at(0)).reason === "invalid-rest" &&
+      C.restStart(session, "abc", at(0)).reason === "invalid-rest");
+
+  // ---- restStart ----------------------------------------------------------
+  const started = C.restStart(session, 60, at(0));
+  ok("restStart cria o descanso vinculado à execução",
+    started.ok === true && started.timer.sessionId === session.id &&
+      started.timer.status === "running" && started.session === session);
+  ok("restStart NÃO persiste nada (descanso efêmero, D-A)",
+    JSON.stringify(sb.Persistence.loadSession()) === persistedBefore);
+  const timer = started.timer;
+
+  // ---- restSnapshot -------------------------------------------------------
+  const snap = C.restSnapshot(timer, at(30 * SEC));
+  ok("restSnapshot devolve o estado calculado",
+    snap.ok === true && snap.rest.remainingMs === 30 * SEC && snap.rest.progress === 0.5 && snap.timer === timer);
+  ok("restSnapshot sem timer -> no-rest",
+    C.restSnapshot(null, at(0)).reason === "no-rest" && C.restSnapshot({}, at(0)).reason === "rest-state");
+  ok("restSnapshot é leitura pura (não persiste nem muta)",
+    timer.status === "running" && timer.remainingMs === null &&
+      JSON.stringify(sb.Persistence.loadSession()) === persistedBefore);
+
+  // ---- vínculo entre execuções --------------------------------------------
+  const other = C.start({ id: "rB", letter: "B", name: "Costas", exercises: routine.exercises }, resolve, at(0)).session;
+  ok("timer de outra execução não é aplicado à sessão atual",
+    C.restPause(timer, at(40 * SEC), other).reason === "rest-other-session" &&
+      C.restSync(timer, other, at(40 * SEC)).reason === "rest-other-session" &&
+      C.restAdd(timer, 15 * SEC, at(40 * SEC), other).reason === "rest-other-session" &&
+      C.restSkip(timer, at(40 * SEC), other).reason === "rest-other-session");
+  ok("recusa por vínculo NÃO corrompe o descanso",
+    timer.status === "running" && C.restSnapshot(timer, at(40 * SEC)).rest.remainingMs === 20 * SEC);
+
+  // ---- pausa/retomada junto com a sessão (D-C) ----------------------------
+  C.pause(session, at(40 * SEC));
+  const syncPaused = C.restSync(timer, session, at(40 * SEC));
+  ok("restSync pausa o descanso quando a sessão pausa",
+    syncPaused.ok === true && timer.status === "paused" && timer.remainingMs === 20 * SEC);
+  ok("descanso pausado não consome tempo", C.restSnapshot(timer, at(20 * MIN)).rest.remainingMs === 20 * SEC);
+
+  C.resume(session, at(20 * MIN));
+  ok("a pausa do descanso NÃO altera a duração do treino",
+    C.elapsedMs(session, at(20 * MIN)) === 40 * SEC && session.pausedMs === 20 * MIN - 40 * SEC);
+  const syncActive = C.restSync(timer, session, at(20 * MIN));
+  ok("restSync retoma o descanso quando a sessão volta a ativa",
+    syncActive.ok === true && timer.status === "running" && timer.endsAt.getTime() === BASE + 20 * MIN + 20 * SEC);
+
+  // ---- operações ----------------------------------------------------------
+  ok("restAdd soma tempo ao descanso",
+    C.restAdd(timer, 15 * SEC, at(20 * MIN), session).ok === true &&
+      C.restSnapshot(timer, at(20 * MIN)).rest.remainingMs === 35 * SEC);
+  ok("restAdd negativo respeita o piso em zero",
+    C.restAdd(timer, -30 * SEC, at(20 * MIN), session).ok === true &&
+      C.restSnapshot(timer, at(20 * MIN)).rest.remainingMs === 5 * SEC);
+  ok("restRestart reinicia com a duração planejada",
+    C.restRestart(timer, at(20 * MIN), undefined, session).ok === true &&
+      C.restSnapshot(timer, at(20 * MIN)).rest.remainingMs === 60 * SEC);
+  ok("restRestart aceita nova duração",
+    C.restRestart(timer, at(20 * MIN), 30, session).ok === true &&
+      C.restSnapshot(timer, at(20 * MIN)).rest.remainingMs === 30 * SEC);
+  ok("restSettle reconhece o descanso expirado",
+    C.restSettle(timer, at(60 * MIN), session).ok === true && timer.status === "finished");
+  ok("restSettle é idempotente",
+    C.restSettle(timer, at(70 * MIN), session).ok === true && timer.status === "finished");
+
+  // ---- recusas de estado --------------------------------------------------
+  ok("operar descanso finalizado -> rest-state",
+    C.restPause(timer, at(70 * MIN), session).reason === "rest-state" &&
+      C.restAdd(timer, 10 * SEC, at(70 * MIN), session).reason === "rest-state");
+  ok("timer estruturalmente inválido -> no-rest/rest-state",
+    C.restPause(null, at(0), session).reason === "no-rest" &&
+      C.restSync(null, session, at(0)).reason === "no-rest" &&
+      C.restSync({}, session, at(0)).reason === "rest-state");
+  ok("restSync sem sessão -> no-session", C.restSync(timer, null, at(0)).reason === "no-session");
+
+  // ---- sessão finalizada encerra o descanso -------------------------------
+  const outroTimer = C.restStart(session, 60, at(0)).timer;
+  ok("restStart pode substituir o descanso da mesma execução", outroTimer.status === "running");
+  C.finish(session, at(80 * MIN));
+  ok("restSync encerra o descanso quando a sessão finaliza",
+    C.restSync(outroTimer, session, at(80 * MIN)).ok === true && outroTimer.status === "finished");
+  ok("finalizar não deixa descanso nem sessão persistidos", sb.Persistence.loadSession() === null);
+  ok("restSkip encerra e é idempotente",
+    C.restSkip(outroTimer, at(90 * MIN), session).ok === true && outroTimer.status === "finished");
+
+  // ---- degradação graciosa sem o módulo -----------------------------------
+  const bare = makeSandbox();
+  loadModules(bare, [
+    "js/utils.js", "services/storage.js", "js/i18n.js", "js/workout-session.js",
+    "js/persistence.js", "js/workout-controller.js",
+  ]);
+  ok("sem js/rest-timer.js as operações degradam para 'unavailable'",
+    bare.WorkoutController.restStart({ id: "s_1" }, 60, at(0)).reason === "unavailable" &&
+      bare.WorkoutController.restSnapshot({}, at(0)).reason === "unavailable" &&
+      bare.WorkoutController.restSync(null, { id: "s_1" }, at(0)).reason === "unavailable");
+}
+
+// ---------------------------------------------------------------------------
 // Wiring estático do HTML
 // ---------------------------------------------------------------------------
 function testWiring() {
@@ -1287,7 +1614,7 @@ function testWiring() {
 
   const html = fs.readFileSync(path.join(ROOT, "TreinoTracker_DeepSeek.html"), "utf8");
 
-  const order = ["js/utils.js", "services/storage.js", "js/i18n.js", "js/data/exercises.js", "js/catalog.js", "js/events.js", "js/routine-actions.js", "js/pr.js", "js/workout-session.js", "js/workout-controller.js"].map((src) => ({
+  const order = ["js/utils.js", "services/storage.js", "js/i18n.js", "js/data/exercises.js", "js/catalog.js", "js/events.js", "js/routine-actions.js", "js/pr.js", "js/workout-session.js", "js/rest-timer.js", "js/workout-controller.js"].map((src) => ({
     src,
     at: html.indexOf('src="' + src + '"'),
   }));
@@ -1330,6 +1657,19 @@ function testWiring() {
     html.includes("WorkoutController.clear()") && !/Persistence\.saveSession\(/.test(html));
   ok("PR integrado ao salvar treino", html.includes("PR.checkNewPR("));
 
+  // Sprint 4 / E3 — o descanso passou a existir como DOMÍNIO testável, mas o
+  // timer VISUAL (ticker, overlay e botões) continua o legado: removê-lo e
+  // ligá-lo ao domínio é escopo da E5. Esta checagem é a cerca da etapa.
+  const restSrc = fs.readFileSync(path.join(ROOT, "js", "rest-timer.js"), "utf8");
+  ok("descanso: módulo de domínio carregado antes do script principal",
+    html.includes('src="js/rest-timer.js"') && restSrc.includes("alignToSession") &&
+      html.indexOf('src="js/rest-timer.js"') < html.indexOf("<script>\n    // ================= CATÁLOGO REAL"));
+  ok("descanso: módulo não conhece DOM nem persistência",
+    !/\bdocument\b|\blocalStorage\b|\bPersistence\b/.test(restSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "")));
+  ok("E3: o timer VISUAL continua o legado (ligá-lo ao domínio é a E5)",
+    html.includes("function startRestTimer(") && html.includes("state.restTimer.time") &&
+      html.includes('id="rest-overlay"') && !/WorkoutController\.restStart\(/.test(html));
+
   const homeBlock = html.match(/<section id="screen-home"[\s\S]*?<\/section>/)[0];
   ok("nenhum <script>/<link> foi enfiado DENTRO do bloco da Home",
     !/<script|<link/i.test(homeBlock));
@@ -1352,7 +1692,9 @@ testPR();
 testRoutineActions();
 testWorkoutSession();
 testPersistenceSession();
+testRestTimer();
 testWorkoutController();
+testWorkoutControllerRest();
 testWiring();
 
 console.log("\n==========================================");

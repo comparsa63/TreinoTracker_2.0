@@ -731,6 +731,25 @@ async function main() {
     endState.routines === 3 && endState.history >= 5 && endState.prs > 12 && endState.catalog >= 80,
     JSON.stringify(endState));
 
+  // --- E3: o descanso passa a existir como DOMÍNIO, sem tocar o timer visual
+  const restWiring = await ev(`(function(){
+    const R = window.RestTimer;
+    const t = R.create(60, 's_demo', new Date());
+    const snap = R.snapshot(t, new Date(t.endsAt.getTime() - 30000));
+    return {
+      exposto: !!R && typeof R.create === 'function' && typeof R.alignToSession === 'function',
+      restante: snap.remainingMs,
+      progresso: snap.progress,
+      recusaSemSessao: window.WorkoutController.restStart(null, 60, new Date()).reason,
+      elementos: typeof startRestTimer === 'function' && typeof skipRest === 'function' &&
+        !!document.getElementById('rest-overlay') && !!document.getElementById('rest-timer-display')
+    };
+  })()`);
+  check("E3: domínio do descanso disponível no browser (overlay e telas presentes)",
+    restWiring.exposto === true && restWiring.restante === 30000 && restWiring.progresso === 0.5 &&
+      restWiring.recusaSemSessao === "no-session" && restWiring.elementos === true,
+    JSON.stringify(restWiring));
+
   // --- Erros de JS ----------------------------------------------------------
   const realErrors = jsErrors.filter((e) => !/unsplash|net::ERR|Failed to load resource|ERR_BLOCKED/i.test(e));
   check("nenhum erro de JS no console", realErrors.length === 0, realErrors.slice(0, 3).join(" | "));
