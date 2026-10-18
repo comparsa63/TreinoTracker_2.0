@@ -4,7 +4,10 @@
  * Ponte entre os DADOS puros (`js/data/exercises.js`, porte do `ExerciseCatalog`
  * do TreinoTracker) e o formato consumido pelas telas do protótipo:
  *
- *     { id, name, muscle, img, en, equipment }
+ *     { id, name, muscle, subgroup, img, en, equipment }
+ *
+ * `muscle` é o grupo principal (`grupoMuscular`) e `subgroup` o grupo
+ * específico opcional (`subgrupo`), quando a classificação é inequívoca.
  *
  * Objetivo da fase: substituir o mock com hotlink do Unsplash por dados reais
  * e imagens locais (assets/images/*.jpg), sem tocar na Home.
@@ -36,6 +39,12 @@
   };
 
   const FALLBACK_IMAGE = "assets/images/quadriceps.jpg";
+
+  /**
+   * Ordem de exibição dos subgrupos (muscleSubgroup) na barra de filtros.
+   * Subgrupos desconhecidos entram no fim, na ordem de aparição.
+   */
+  const SUBGROUP_ORDER = ["Quadríceps", "Posterior de Coxa", "Panturrilha", "Lombar", "Glúteo"];
 
   /** Fonte de dados: global (browser) ou require (Node, testes). */
   function dataSource() {
@@ -72,6 +81,11 @@
     return ex.grupoMuscular || ex.group || "";
   }
 
+  /** Grupo específico (opcional) — ex.: "Quadríceps", "Posterior de Coxa". */
+  function subgroupOf(ex) {
+    return ex.subgrupo || ex.muscleSubgroup || "";
+  }
+
   function nameOf(ex) {
     return ex.nome || ex.pt || ex.en || "";
   }
@@ -89,6 +103,7 @@
       name: nameOf(ex),
       en: ex.en || "",
       muscle: group,
+      subgroup: subgroupOf(ex),
       equipment: ex.equipment || ex.equipamento || "",
       img: muscleImage(group),
     };
@@ -112,6 +127,53 @@
         }
       });
       return out;
+    },
+
+    /** Subgrupos (grupo específico) presentes, em ordem estável de exibição. */
+    subgroups() {
+      const seen = Object.create(null);
+      const present = [];
+      list().forEach((ex) => {
+        const s = subgroupOf(ex);
+        if (s && !seen[s]) {
+          seen[s] = true;
+          present.push(s);
+        }
+      });
+      return present.sort((a, b) => {
+        const ia = SUBGROUP_ORDER.indexOf(a);
+        const ib = SUBGROUP_ORDER.indexOf(b);
+        if (ia === -1 && ib === -1) return 0;
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+      });
+    },
+
+    /**
+     * Valores selecionáveis na barra de filtros: grupos principais + subgrupos,
+     * sem duplicar um subgrupo que já seja grupo principal (ex.: "Glúteo").
+     */
+    filterGroups() {
+      const seen = Object.create(null);
+      const out = [];
+      Catalog.groups().concat(Catalog.subgroups()).forEach((g) => {
+        if (g && !seen[g]) {
+          seen[g] = true;
+          out.push(g);
+        }
+      });
+      return out;
+    },
+
+    /** Grupo principal de um registro cru. */
+    muscleOf(ex) {
+      return muscleOf(ex);
+    },
+
+    /** Subgrupo (grupo específico) de um registro cru, se houver. */
+    subgroupOf(ex) {
+      return subgroupOf(ex);
     },
 
     /** Registros crus do catálogo. */
@@ -147,6 +209,12 @@
       return list().filter((ex) => normalize(muscleOf(ex)) === g);
     },
 
+    /** Exercícios de um subgrupo específico (ex.: "Quadríceps"). */
+    findBySubgroup(subgroup) {
+      const s = normalize(subgroup);
+      return list().filter((ex) => normalize(subgroupOf(ex)) === s);
+    },
+
     findByMuscle(muscle) {
       const m = normalize(muscle);
       return list().filter((ex) => {
@@ -178,7 +246,7 @@
     /**
      * Busca para a tela de adicionar exercício.
      * @param {string} term  texto livre
-     * @param {string} group grupo muscular (ou 'all')
+     * @param {string} group grupo principal, subgrupo específico (ou 'all')
      * @returns {Array} itens no formato do protótipo
      */
     search(term, group) {
@@ -186,9 +254,9 @@
       const g = group && group !== "all" ? group : null;
       return list()
         .filter((ex) => {
-          if (g && muscleOf(ex) !== g) return false;
+          if (g && muscleOf(ex) !== g && subgroupOf(ex) !== g) return false;
           if (!t) return true;
-          return [nameOf(ex), ex.en, muscleOf(ex), ex.equipment, ex.equipamento]
+          return [nameOf(ex), ex.en, muscleOf(ex), subgroupOf(ex), ex.equipment, ex.equipamento]
             .some((v) => normalize(v).indexOf(t) !== -1);
         })
         .map(toPrototype);

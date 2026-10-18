@@ -365,6 +365,44 @@ function testCatalog() {
   // API no espírito do ExerciseRepository
   ok("findById", !!C.findById("C-02"));
   ok("findByGroup", C.findByGroup("Peito").length > 0 && C.findByGroup("Peito").every((e) => e.grupoMuscular === "Peito"));
+
+  // ── Taxonomia: grupo principal (grupoMuscular) + grupo específico (subgrupo) ──
+  const subgroups = C.subgroups();
+  ok("subgroups inclui Quadríceps, Posterior de Coxa, Panturrilha e Lombar",
+    ["Quadríceps", "Posterior de Coxa", "Panturrilha", "Lombar"].every((s) => subgroups.indexOf(s) !== -1),
+    subgroups.join(","));
+
+  const filterGroups = C.filterGroups();
+  ok("filterGroups = grupos principais + subgrupos (sem duplicatas)",
+    filterGroups.length === new Set(filterGroups).size &&
+    C.groups().every((g) => filterGroups.indexOf(g) !== -1) &&
+    subgroups.every((s) => filterGroups.indexOf(s) !== -1),
+    filterGroups.join(","));
+  ok("filterGroups não duplica 'Glúteo' (grupo principal e subgrupo)",
+    filterGroups.filter((g) => g === "Glúteo").length === 1);
+
+  const quad = C.search("", "Quadríceps");
+  ok("filtro por subgrupo Quadríceps", quad.length === 6 && quad.every((i) => i.subgroup === "Quadríceps"), String(quad.length));
+  const posterior = C.search("", "Posterior de Coxa");
+  ok("filtro por subgrupo Posterior de Coxa", posterior.length === 3 && posterior.every((i) => i.subgroup === "Posterior de Coxa"), String(posterior.length));
+  const panturrilha = C.search("", "Panturrilha");
+  ok("filtro por subgrupo Panturrilha", panturrilha.length === 2 && panturrilha.every((i) => i.subgroup === "Panturrilha"), String(panturrilha.length));
+  const lombar = C.search("", "Lombar");
+  ok("filtro por subgrupo Lombar", lombar.length === 1 && lombar.every((i) => i.subgroup === "Lombar"), String(lombar.length));
+
+  ok("grupo principal segue contemplando os subgrupos",
+    C.search("", "Pernas").length === 12, String(C.search("", "Pernas").length));
+  ok("findBySubgroup", C.findBySubgroup("Quadríceps").length === 6);
+  ok("ids do catálogo permanecem estáveis e únicos",
+    new Set(C.all().map((e) => e.id)).size === C.all().length && !!C.findById("G-04") && !!C.findById("D-10"));
+  ok("subgrupo não altera o grupo principal",
+    C.findById("G-10").grupoMuscular === "Pernas" && C.findById("G-10").subgrupo === "Panturrilha");
+  ok("busca por nome continua funcionando",
+    C.search("panturrilha", "all").length >= 2 && C.search("leg press", "all").length >= 1);
+  ok("item sem subgrupo expõe subgroup como string vazia",
+    C.search("supino", "all").every((i) => typeof i.subgroup === "string"));
+  ok("toPrototype preserva rótulo do grupo principal",
+    C.search("", "Quadríceps").every((i) => i.muscle === "Pernas"));
   ok("hasInstructions/getInstructions", C.hasInstructions("Supino reto") && C.getInstructions("Supino reto").length >= 3);
   ok("getMistakes/getTips", C.getMistakes("Supino reto").length > 0 && C.getTips("Supino reto").length > 0);
   ok("exercício sem instruções -> []", C.getInstructions("Prancha").length === 0);

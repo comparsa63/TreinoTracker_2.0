@@ -338,7 +338,7 @@ async function main() {
       var rects = chips.map(function(c){ var b = c.getBoundingClientRect(); return { l: Math.round(b.left), r: Math.round(b.right), h: Math.round(b.height) }; });
       return {
         chips: chips.length,
-        groups: (typeof Catalog !== 'undefined') ? Catalog.groups().length : -1,
+        groups: (typeof Catalog !== 'undefined') ? Catalog.filterGroups().length : -1,
         hostScroll: host.scrollWidth - host.clientWidth,
         pageScroll: document.documentElement.scrollWidth - window.innerWidth,
         allInside: rects.every(function(b){ return b.l >= -1 && b.r <= Math.ceil(window.innerWidth) + 1; }),
@@ -354,7 +354,7 @@ async function main() {
     check("filtros @" + w + "px: alvo de toque >= 28px", r.minHeight >= 28, String(r.minHeight));
   }
 
-  // clicar no ÚLTIMO grupo (o que antes ficava fora da área visível)
+  // clicar no ÚLTIMO filtro (o que antes ficava fora da área visível)
   const lastGroup = await ev(`(function(){
     navigate('add-exercise');
     var host = document.getElementById('catalog-filters');
@@ -368,12 +368,76 @@ async function main() {
       group: group,
       active: active ? active.innerText.trim() : null,
       items: items.length,
-      allMatch: items.length > 0 && items.every(function(it){ return it.querySelector('.info p').innerText.trim() === group; })
+      allMatch: items.length > 0 && items.every(function(it){ return it.querySelector('.info p').innerText.trim().indexOf(group) !== -1; })
     };
   })()`);
-  check("filtros: clique no último grupo (fora da área visível inicial) filtra o catálogo",
+  check("filtros: clique no último filtro (fora da área visível inicial) filtra o catálogo",
     lastGroup.items > 0 && lastGroup.allMatch && lastGroup.active === lastGroup.group,
     JSON.stringify(lastGroup));
+
+  // --- Taxonomia: subgrupos específicos filtráveis ---------------------------
+  const taxonomy = await ev(`(function(){
+    navigate('add-exercise');
+    var host = document.getElementById('catalog-filters');
+    function chips(){ return Array.prototype.slice.call(host.querySelectorAll('.filter-btn')); }
+    function findChip(label){ return chips().filter(function(c){ return c.innerText.trim() === label; })[0]; }
+    function items(){ return Array.prototype.slice.call(document.querySelectorAll('#catalog-container .catalog-item')); }
+    function subtitleOf(it){ return it.querySelector('.info p').innerText.trim(); }
+    function clickChip(name){ var c = findChip(name); if (!c) return null; c.click(); return { items: items().length, labels: items().map(subtitleOf) }; }
+    var present = chips().map(function(c){ return c.innerText.trim(); });
+    var result = {
+      present: present,
+      quad: clickChip('Quadríceps'),
+      posterior: clickChip('Posterior de Coxa'),
+      panturrilha: clickChip('Panturrilha'),
+      lombar: clickChip('Lombar'),
+      pernas: clickChip('Pernas'),
+      peito: clickChip('Peito'),
+    };
+    state.catalogFilter = 'all';
+    renderCatalog();
+    return result;
+  })()`);
+  const allGroups = ["Peito", "Costas", "Ombro", "Bíceps", "Tríceps", "Antebraço", "Pernas", "Glúteo", "Abdômen", "Trapézio"];
+  check("taxonomia: todos os grupos atuais continuam disponíveis",
+    allGroups.every(function(g){ return taxonomy.present.indexOf(g) !== -1; }),
+    taxonomy.present.join(","));
+  check("taxonomia: subgrupos novos estão nos filtros",
+    ["Quadríceps", "Posterior de Coxa", "Panturrilha", "Lombar"].every(function(s){ return taxonomy.present.indexOf(s) !== -1; }),
+    taxonomy.present.join(","));
+  check("taxonomia: filtro Quadríceps (6 exercícios, rótulo com o subgrupo)",
+    taxonomy.quad && taxonomy.quad.items === 6 && taxonomy.quad.labels.every(function(l){ return l.indexOf("Quadríceps") !== -1; }),
+    JSON.stringify(taxonomy.quad));
+  check("taxonomia: filtro Posterior de Coxa (3 exercícios)",
+    taxonomy.posterior && taxonomy.posterior.items === 3 && taxonomy.posterior.labels.every(function(l){ return l.indexOf("Posterior de Coxa") !== -1; }),
+    JSON.stringify(taxonomy.posterior));
+  check("taxonomia: filtro Panturrilha (2 exercícios)",
+    taxonomy.panturrilha && taxonomy.panturrilha.items === 2 && taxonomy.panturrilha.labels.every(function(l){ return l.indexOf("Panturrilha") !== -1; }),
+    JSON.stringify(taxonomy.panturrilha));
+  check("taxonomia: filtro Lombar (1 exercício)",
+    taxonomy.lombar && taxonomy.lombar.items === 1 && taxonomy.lombar.labels.every(function(l){ return l.indexOf("Lombar") !== -1; }),
+    JSON.stringify(taxonomy.lombar));
+  check("taxonomia: grupo principal Pernas segue com 12 exercícios",
+    taxonomy.pernas && taxonomy.pernas.items === 12, JSON.stringify(taxonomy.pernas));
+  check("taxonomia: grupo principal Peito inalterado (10)",
+    taxonomy.peito && taxonomy.peito.items === 10, JSON.stringify(taxonomy.peito));
+
+  // busca por nome continua funcionando (com filtro de subgrupo ativo)
+  const searchCheck = await ev(`(function(){
+    navigate('add-exercise');
+    state.catalogFilter = 'all';
+    var input = document.getElementById('search-catalog');
+    input.value = 'panturrilha';
+    renderCatalog();
+    var names = Array.prototype.slice.call(document.querySelectorAll('#catalog-container .catalog-item h4')).map(function(h){ return h.innerText.trim(); });
+    input.value = '';
+    state.catalogFilter = 'all';
+    renderCatalog();
+    return names;
+  })()`);
+  check("taxonomia: pesquisa por nome continua funcionando",
+    searchCheck.length >= 2 && searchCheck.some(function(n){ return n.toLowerCase().indexOf("panturrilha") !== -1; }),
+    searchCheck.join(" | "));
 
   // volta ao viewport mobile padrão e ao filtro 'all'
   await cdp.send("Emulation.setDeviceMetricsOverride", {
