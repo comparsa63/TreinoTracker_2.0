@@ -678,6 +678,265 @@ function testRoutineActions() {
 }
 
 // ---------------------------------------------------------------------------
+// WorkoutSession — domínio da sessão (Sprint 4 / E1)
+// ---------------------------------------------------------------------------
+function testWorkoutSession() {
+  const sb = makeSandbox();
+  loadModules(sb, ["js/utils.js", "js/workout-session.js"]);
+  const WS = sb.WorkoutSession;
+
+  suite("WorkoutSession (domínio da sessão)");
+
+  // `instanceof Date` não atravessa realms do vm: checagem agnóstica.
+  const isDate = (v) => Object.prototype.toString.call(v) === "[object Date]";
+
+  ok("expõe WorkoutSession no global", !!WS);
+  ok("module.exports expõe a mesma API",
+    typeof require(path.join(ROOT, "js/workout-session.js")).create === "function");
+  eq("STATUS canônico", [WS.STATUS.ACTIVE, WS.STATUS.PAUSED, WS.STATUS.FINISHED],
+    ["active", "paused", "finished"]);
+
+  // ---- Fixtures com o formato REAL das rotinas do app --------------------
+  const T0 = new Date("2026-10-18T10:00:00.000Z");
+  const routine = {
+    id: "rA",
+    letter: "A",
+    name: "Peito e tríceps",
+    exercises: [
+      { catalogId: "C-02", sets: 2, reps: 12, weight: 60, rest: 60 },
+      { catalogId: "C-01", sets: 1, reps: 10, weight: 40, rest: 60 },
+    ],
+  };
+  const resolve = (id) => ({ name: "Ex " + id, muscle: "Peito", img: "assets/images/peito.jpg" });
+
+  // ---- create() ----------------------------------------------------------
+  const s = WS.create(routine, T0, { resolve });
+  ok("create gera sessão ativa", !!s && s.status === "active" && s.isFinished === false);
+  ok("create preserva a rotina de origem",
+    s.routineId === "rA" && s.letter === "A" && s.routineName === "Peito e tríceps");
+  ok("create gera id estável e único",
+    typeof s.id === "string" && s.id.length > 0 && WS.create(routine, T0).id !== s.id);
+  ok("startedAt registrado como Date",
+    isDate(s.startedAt) && s.startedAt.getTime() === T0.getTime());
+  eq("índices iniciais", [s.currentExerciseIndex, s.currentSetIndex], [0, 1]);
+
+  const ex0 = s.exercises[0];
+  ok("preserva id do catálogo e metas da rotina",
+    ex0.catalogId === "C-02" && ex0.sets === 2 && ex0.reps === 12 && ex0.weight === 60 && ex0.rest === 60);
+  ok("resolve enriquece nome/músculo/imagem",
+    ex0.name === "Ex C-02" && ex0.muscle === "Peito" && /^assets\/images\//.test(ex0.img));
+  ok("actualWeight/actualReps partem da meta", ex0.actualWeight === 60 && ex0.actualReps === 12);
+  ok("inicia sem séries concluídas",
+    ex0.setsCompleted === 0 && Array.isArray(ex0.completedSets) && ex0.completedSets.length === 0);
+  eq("progresso inicial", WS.progress(s), {
+    totalExercises: 2, completedExercises: 0, totalSets: 3, completedSets: 0,
+    currentExerciseIndex: 0, currentSetIndex: 1, percent: 0,
+  });
+
+  const noResolve = WS.create(routine, T0);
+  ok("sem resolve mantém os dados da rotina e não quebra",
+    noResolve.exercises[0].catalogId === "C-02" && noResolve.exercises[0].name === "");
+
+  ok("create rejeita entrada inválida",
+    WS.create(null) === null && WS.create([]) === null && WS.create("x") === null);
+
+  const emptyRoutine = WS.create({ id: "rZ", letter: "Z", name: "Vazia", exercises: [] }, T0);
+  ok("rotina vazia ainda é uma sessão válida",
+    !!emptyRoutine && emptyRoutine.exercises.length === 0);
+  eq("progresso de rotina vazia", WS.progress(emptyRoutine).percent, 0);
+
+  const injected = WS.create({ id: "rI", exercises: [null, "x", { foo: 1 }] }, T0);
+  ok("exercícios sem identidade são descartados",
+    injected.exercises.length === 0 && WS.progress(injected).percent === 0);
+
+  // ---- completeSet(): séries reais ---------------------------------------
+  ok("completeSet registra a série com carga/reps reais",
+    WS.completeSet(s, { weight: 62.5, reps: 12 }, T0) === s);
+  eq("série gravada", s.exercises[0].completedSets, [{ weight: 62.5, reps: 12 }]);
+  ok("setsCompleted espelha completedSets",
+    s.exercises[0].setsCompleted === 1 && s.exercises[0].setsCompleted === s.exercises[0].completedSets.length);
+  eq("avança para a próxima série", s.currentSetIndex, 2);
+  eq("progresso 1/3", WS.progress(s).completedSets, 1);
+  eq("percentual arredondado", WS.progress(s).percent, 33);
+
+  const before = JSON.stringify(s);
+  ok("weight não numérico é rejeitado",
+    WS.completeSet(s, { weight: "abc", reps: 5 }) === null);
+  ok("reps < 1 é rejeitado", WS.completeSet(s, { weight: 10, reps: 0 }) === null);
+  ok("weight negativo é rejeitado", WS.completeSet(s, { weight: -5, reps: 5 }) === null);
+  ok("entrada ausente é rejeitada", WS.completeSet(s) === null && WS.completeSet(s, {}) === null);
+  ok("rejeição não altera a sessão", JSON.stringify(s) === before);
+
+  ok("aceita string numérica ('62,5' / '10')",
+    WS.completeSet(s, { weight: "62,5", reps: "10" }, T0) === s);
+  eq("string numérica normalizada", s.exercises[0].completedSets[1], { weight: 62.5, reps: 10 });
+  ok("ao esgotar as séries o exercício avança",
+    s.currentExerciseIndex === 1 && s.currentSetIndex === 1);
+  ok("séries pendentes do próximo exercício não contam",
+    s.exercises[1].completedSets.length === 0 && s.exercises[1].setsCompleted === 0);
+  eq("progresso 2/3", WS.progress(s).completedSets, 2);
+
+  const T1 = new Date("2026-10-18T10:30:00.000Z");
+  ok("a última série encerra a sessão",
+    WS.completeSet(s, { weight: 40, reps: 10 }, T1) === s && s.status === "finished" && s.isFinished === true);
+  ok("finishedAt registrado", isDate(s.finishedAt) && s.finishedAt.getTime() === T1.getTime());
+  eq("progresso final", WS.progress(s), {
+    totalExercises: 2, completedExercises: 2, totalSets: 3, completedSets: 3,
+    currentExerciseIndex: 1, currentSetIndex: 1, percent: 100,
+  });
+
+  // ---- transições inválidas ---------------------------------------------
+  ok("sessão finalizada não aceita nova série",
+    WS.completeSet(s, { weight: 40, reps: 10 }) === null);
+  ok("navegação em sessão finalizada é recusada", WS.next(s) === null && WS.prev(s) === null);
+  ok("pause/resume em sessão finalizada é recusado", WS.pause(s) === null && WS.resume(s) === null);
+  ok("não completa série sem exercício corrente",
+    WS.completeSet(WS.create(emptyRoutine, T0), { weight: 10, reps: 10 }) === null);
+  ok("completeSet em estrutura inválida -> null", WS.completeSet({}, { weight: 1, reps: 1 }) === null);
+
+  // ---- navegação nos limites --------------------------------------------
+  const nav = WS.create(routine, T0);
+  ok("prev no primeiro exercício -> null", WS.prev(nav) === null);
+  ok("next avança de exercício", WS.next(nav) === nav && nav.currentExerciseIndex === 1);
+  ok("next no último exercício -> null", WS.next(nav) === null);
+  ok("prev volta de exercício", WS.prev(nav) === nav && nav.currentExerciseIndex === 0);
+  ok("navegação em rotina vazia -> null",
+    WS.next(emptyRoutine) === null && WS.prev(emptyRoutine) === null);
+  ok("currentSetIndex nunca ultrapassa o planejado",
+    nav.currentSetIndex >= 1 && nav.currentSetIndex <= nav.exercises[nav.currentExerciseIndex].sets);
+
+  // ---- pausa / retomada --------------------------------------------------
+  const p = WS.create(routine, T0);
+  WS.completeSet(p, { weight: 60, reps: 12 }, T0);
+  const T5 = new Date("2026-10-18T10:05:00.000Z");
+  const T15 = new Date("2026-10-18T10:15:00.000Z");
+  ok("pause marca status e pausedAt",
+    WS.pause(p, T5) === p && p.status === "paused" && p.pausedAt.getTime() === T5.getTime());
+  ok("pause é idempotente",
+    WS.pause(p, new Date("2026-10-18T10:06:00.000Z")) === p && p.pausedAt.getTime() === T5.getTime());
+  ok("sessão pausada não aceita série", WS.completeSet(p, { weight: 60, reps: 12 }) === null);
+  eq("progresso preservado na pausa", WS.progress(p).completedSets, 1);
+  ok("resume acumula pausedMs e limpa pausedAt",
+    WS.resume(p, T15) === p && p.status === "active" && p.pausedAt === null && p.pausedMs === 10 * 60000);
+  ok("resume é idempotente quando já ativa",
+    WS.resume(p, new Date("2026-10-18T10:20:00.000Z")) === p && p.pausedMs === 10 * 60000);
+  eq("progresso intacto após pausa/retomada", WS.progress(p).completedSets, 1);
+  eq("elapsedMs desconta o tempo pausado",
+    WS.elapsedMs(p, new Date("2026-10-18T10:30:00.000Z")), 20 * 60000);
+  ok("elapsedMs de estrutura inválida -> 0", WS.elapsedMs(null) === 0);
+
+  // ---- finish() ----------------------------------------------------------
+  const f = WS.create(routine, T0);
+  WS.pause(f, T5);
+  ok("finish em sessão ativa/pausada encerra",
+    WS.finish(f, T15) === f && f.status === "finished" && f.isFinished === true);
+  ok("finish fecha a pausa em aberto", f.pausedAt === null && f.pausedMs === 10 * 60000);
+  const fId = f.id;
+  const fAt = f.finishedAt.getTime();
+  WS.finish(f, new Date("2026-10-18T11:30:00.000Z"));
+  ok("finish é idempotente (mesma identidade e mesmo instante)",
+    f.id === fId && f.finishedAt.getTime() === fAt && f.status === "finished");
+  ok("finish em estrutura inválida -> null", WS.finish(null) === null);
+
+  const early = WS.create(routine, T0);
+  ok("finish antes de concluir mantém o progresso parcial",
+    WS.finish(early, T5) === early && WS.progress(early).percent === 0 && early.status === "finished");
+
+  // ---- progress(): bordas ------------------------------------------------
+  ok("progress de estrutura inválida não lança",
+    WS.progress(null).percent === 0 && WS.progress({}).percent === 0 && WS.progress([]).percent === 0);
+  ok("progress tolera dados incompletos",
+    WS.progress({ exercises: [{ sets: 4 }, null, { sets: 0, setsCompleted: 9 }] }).percent === 0);
+  ok("progress clampa séries concluídas ao planejado",
+    WS.progress({ exercises: [{ sets: 2, setsCompleted: 5 }] }).completedSets === 2);
+  ok("percentual sempre entre 0 e 100",
+    [0, 33, 99, 100, 250].every((n) => {
+      const pr = WS.progress({ exercises: [{ sets: 3, setsCompleted: n }] });
+      return pr.percent >= 0 && pr.percent <= 100;
+    }));
+
+  // ---- sanitize() --------------------------------------------------------
+  const raw = JSON.parse(JSON.stringify(s));
+  const san = WS.sanitize(raw);
+  ok("sanitize preserva a identidade", san.id === s.id && san.routineId === "rA" && san.letter === "A");
+  ok("sanitize preserva o encerramento",
+    san.status === "finished" && san.isFinished === true &&
+      isDate(san.finishedAt) && san.finishedAt.getTime() === T1.getTime());
+  eq("sanitize preserva o progresso", WS.progress(san), WS.progress(s));
+  eq("sanitize preserva as séries concluídas", san.exercises[0].completedSets, s.exercises[0].completedSets);
+  eq("sanitize preserva as metas da rotina",
+    [san.exercises[0].catalogId, san.exercises[0].sets, san.exercises[0].reps, san.exercises[0].weight],
+    ["C-02", 2, 12, 60]);
+
+  const paused = WS.create(routine, T0);
+  WS.pause(paused, T5);
+  const sanPaused = WS.sanitize(JSON.parse(JSON.stringify(paused)));
+  ok("sanitize preserva pausa em aberto",
+    sanPaused.status === "paused" && sanPaused.isFinished === false && isDate(sanPaused.pausedAt));
+
+  const sanActive = WS.sanitize(JSON.parse(JSON.stringify(p)));
+  ok("sanitize preserva pausedMs acumulado",
+    sanActive.status === "active" && sanActive.pausedAt === null && sanActive.pausedMs === 10 * 60000);
+
+  ok("sanitize rejeita não-objeto/array",
+    WS.sanitize(null) === null && WS.sanitize([]) === null && WS.sanitize("x") === null && WS.sanitize(0) === null);
+  ok("sanitize rejeita exercises que não é array",
+    WS.sanitize({ startedAt: "2026-10-18T10:00:00Z" }) === null &&
+      WS.sanitize({ startedAt: "2026-10-18T10:00:00Z", exercises: "x" }) === null);
+  ok("sanitize rejeita startedAt ausente/inválido",
+    WS.sanitize({ exercises: [] }) === null && WS.sanitize({ exercises: [], startedAt: "nope" }) === null);
+  ok("sanitize rejeita sessão finalizada sem finishedAt",
+    WS.sanitize({ exercises: [], startedAt: "2026-10-18T10:00:00Z", status: "finished" }) === null);
+
+  const bad = WS.sanitize({
+    startedAt: "2026-10-18T10:00:00Z",
+    isFinished: true,
+    finishedAt: "2026-10-18T10:40:00Z",
+    currentExerciseIndex: 99,
+    currentSetIndex: 0,
+    exercises: [
+      null,
+      "x",
+      { catalogId: "C-02", sets: 2, reps: 12, weight: 60, rest: 60, completedSets: [
+        { weight: 60, reps: 12 }, { weight: "x", reps: 5 }, { weight: 70, reps: 8 }, { weight: 80, reps: 6 },
+      ] },
+      { name: "Exercício custom", sets: "3", reps: "10" },
+      { foo: "bar" },
+    ],
+  });
+  ok("sanitize deriva status do isFinished legado",
+    bad.status === "finished" && bad.isFinished === true && isDate(bad.finishedAt));
+  eq("sanitize descarta exercícios inválidos", bad.exercises.length, 2);
+  eq("sanitize descarta séries inválidas e clampa ao planejado", bad.exercises[0].completedSets.length, 2);
+  ok("sanitize sincroniza setsCompleted com completedSets",
+    bad.exercises[0].setsCompleted === bad.exercises[0].completedSets.length);
+  ok("sanitize reconhece exercício só com nome", bad.exercises[1].name === "Exercício custom" &&
+    bad.exercises[1].sets === 3 && bad.exercises[1].reps === 10);
+  ok("sanitize clampa os índices aos limites",
+    bad.currentExerciseIndex === 1 && bad.currentSetIndex === 1);
+  ok("sanitize corrige valores corrompidos",
+    WS.sanitize({ startedAt: "2026-10-18T10:00:00Z", exercises: [
+      { catalogId: "A-01", sets: -3, reps: 0, weight: -10, rest: "x", completedSets: [{ weight: -5, reps: -2 }] },
+    ] }).exercises[0].weight === 0);
+
+  // ---- independência de DOM / localStorage / estado global ---------------
+  const bare = { console: { log() {}, warn() {}, info() {} } };
+  vm.createContext(bare);
+  loadModules(bare, ["js/workout-session.js"]);
+  ok("módulo carrega sem document/localStorage",
+    typeof bare.WorkoutSession === "object" && bare.localStorage === undefined && bare.document === undefined);
+  const bareSession = bare.WorkoutSession.create(routine, T0);
+  ok("módulo opera sem document/localStorage",
+    bareSession.status === "active" && bare.WorkoutSession.completeSet(bareSession, { weight: 10, reps: 10 }, T0) === bareSession);
+
+  const src = fs.readFileSync(path.join(ROOT, "js/workout-session.js"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  ok("código não referencia DOM/storage/estado global",
+    !/\bdocument\b|\blocalStorage\b|\bwindow\b|\bsessionStorage\b/.test(src) &&
+      !/\bPersistence\b|\bEventBus\b|\bCatalog\b|\bStorageService\b|\bstate\b/.test(src));
+}
+
+// ---------------------------------------------------------------------------
 // Wiring estático do HTML
 // ---------------------------------------------------------------------------
 function testWiring() {
@@ -733,6 +992,7 @@ testPersistence2C();
 testCatalog();
 testPR();
 testRoutineActions();
+testWorkoutSession();
 testWiring();
 
 console.log("\n==========================================");
