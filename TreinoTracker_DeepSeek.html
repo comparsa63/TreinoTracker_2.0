@@ -337,19 +337,44 @@
         }
         .fixed-action-btn .btn { width: 100%; height: 60px; font-size: 1.1rem; box-shadow: 0 4px 20px rgba(0, 255, 85, 0.2); }
 
+        /* ================= E7: TOQUE, FOCO E TELA ACESSÍVEL (PLAYER) ================= */
+        /* Áreas de toque confortáveis (>= 44 px) nos controles do Player e das
+           suas sobreposições. Escopo por ID para NÃO afetar a Home nem as demais
+           telas que reutilizam .btn-sm / .btn-icon. */
+        #screen-player .btn-sm, #screen-player .btn-icon { min-width: 44px; min-height: 44px; }
+        #rest-overlay .btn { min-height: 48px; }
+        /* Foco visível para navegação por teclado (só onde a E7 atua). */
+        #screen-player :focus-visible,
+        #rest-overlay :focus-visible,
+        #exit-modal :focus-visible,
+        #resume-modal :focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+        /* Conteúdo só para leitores de tela (região viva de status do Player). */
+        .sr-only {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+            overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+        }
+
         /* ================= OVERLAY DE DESCANSO ================= */
         #rest-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(11, 14, 20, 0.95); backdrop-filter: blur(8px);
             z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center;
+            overflow-y: auto; /* E7: em telas curtas o conteúdo rola, sem corte */
         }
         #rest-overlay.active { display: flex; }
-        .rest-circle-container { position: relative; width: 280px; height: 280px; margin-bottom: 32px; }
+        /* E7: o círculo era fixo em 280 px e estourava telas de 320 px (280 + 48
+           de padding > 320). Passa a caber no viewport sem media query — o SVG
+           escala junto (viewBox fixo), então o traço do progresso não muda. */
+        .rest-circle-container { position: relative; width: min(280px, 72vw); height: min(280px, 72vw); margin-bottom: 32px; }
         .rest-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
         .rest-svg circle { fill: none; stroke-width: 12; stroke-linecap: round; }
         .rest-bg-circle { stroke: #1c2331; }
         .rest-progress-circle { stroke: var(--primary); stroke-dasharray: 816; stroke-dashoffset: 0; transition: stroke-dashoffset 1s linear; }
-        .rest-time-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 4rem; font-weight: 800; letter-spacing: -2px; }
+        /* E7: o número acompanha o círculo fluido (sem estourar em 320 px). */
+        .rest-time-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: clamp(2.4rem, 15vw, 4rem); font-weight: 800; letter-spacing: -2px; }
         .rest-label { font-size: 1.2rem; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 2px; }
 
         /* ================= MODAIS (SAÍDA) ================= */
@@ -573,6 +598,10 @@
 
     <!-- ================= TELA 9: WORKOUT PLAYER ================= -->
     <section id="screen-player" class="screen no-padding">
+        <!-- E7: região viva que anuncia EVENTOS discretos do treino (pausa,
+             retomada, série concluída, descanso concluído) a leitores de tela.
+             O ticker do descanso NÃO escreve aqui (sem anúncio a cada 250 ms). -->
+        <div id="player-status" class="sr-only" role="status" aria-live="polite"></div>
         <div class="player-header">
             <div class="player-top-bar">
                 <div>
@@ -581,7 +610,7 @@
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <button class="btn btn-sm" id="btn-pause-resume" onclick="togglePauseWorkout()" data-i18n="pause_workout">Pausar</button>
-                    <button class="btn btn-icon" onclick="showExitModal()">✕</button>
+                    <button class="btn btn-icon" onclick="showExitModal()" data-i18n-aria-label="exit_workout" aria-label="Sair do treino">✕</button>
                 </div>
             </div>
             <div class="progress-container">
@@ -666,9 +695,9 @@
         </div>
     </section>
 
-    <!-- OVERLAY DE DESCANSO -->
-    <div id="rest-overlay">
-        <div class="rest-label" data-i18n="rest_label">Descanso</div>
+    <!-- OVERLAY DE DESCANSO (E7.1: diálogo modal — fundo inalcançável por Tab) -->
+    <div id="rest-overlay" role="dialog" aria-modal="true" aria-labelledby="rest-overlay-label">
+        <div class="rest-label" id="rest-overlay-label" data-i18n="rest_label">Descanso</div>
         <div class="rest-circle-container">
             <svg class="rest-svg" viewBox="0 0 280 280">
                 <circle class="rest-bg-circle" cx="140" cy="140" r="130"></circle>
@@ -676,9 +705,9 @@
             </svg>
             <div class="rest-time-text" id="rest-timer-display">01:00</div>
         </div>
-        <button class="btn btn-primary" style="width: 100%; max-width: 300px; margin-bottom: 12px;" onclick="adjustRestTime(-15)">- 15s</button>
-        <button class="btn btn-primary" style="width: 100%; max-width: 300px; margin-bottom: 12px;" onclick="adjustRestTime(15)">+ 15s</button>
-        <button class="btn" style="background: transparent; color: var(--primary); font-weight: 700;" onclick="skipRest()" data-i18n="skip_rest">Pular Descanso ➔</button>
+        <button class="btn btn-primary" id="btn-rest-decrease" data-i18n-aria-label="rest_decrease" aria-label="- 15s: diminuir o descanso" style="width: 100%; max-width: 300px; margin-bottom: 12px;" onclick="adjustRestTime(-15)">- 15s</button>
+        <button class="btn btn-primary" id="btn-rest-increase" data-i18n-aria-label="rest_increase" aria-label="+ 15s: aumentar o descanso" style="width: 100%; max-width: 300px; margin-bottom: 12px;" onclick="adjustRestTime(15)">+ 15s</button>
+        <button class="btn" id="btn-rest-skip" style="background: transparent; color: var(--primary); font-weight: 700;" onclick="skipRest()" data-i18n="skip_rest">Pular Descanso ➔</button>
     </div>
 
     <!-- MODAL DE SAÍDA -->
@@ -1152,6 +1181,33 @@
         Persistence.saveAutoRest(state.autoRestEnabled);
     }
 
+    // ================= ACESSIBILIDADE DO PLAYER (Sprint 4 / E7) =================
+
+    /**
+     * Nome acessível de controles cujo TEXTO visível é um símbolo (`+15s`, `✕`).
+     * As frases vêm do i18n (pt/en/es) por meio de `data-i18n-aria-label`, sem
+     * tocar no texto visível — o mecanismo normal (`data-i18n`) continua sendo o
+     * dono do que se vê; aqui só completamos o nome para leitores de tela.
+     */
+    function applyPlayerA11yLabels() {
+        const table = translations[state.lang] || {};
+        document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+            const key = el.getAttribute('data-i18n-aria-label');
+            if (table[key]) el.setAttribute('aria-label', table[key]);
+        });
+    }
+
+    /**
+     * Anuncia na região viva (`#player-status`, role=status/aria-live=polite)
+     * APENAS eventos discretos: pausa, retomada, série concluída e descanso
+     * concluído. Nada de chamar isto no ticker — o descanso muda 4x/s e um
+     * anúncio por tick seria ruído puro.
+     */
+    function announcePlayer(message) {
+        const el = document.getElementById('player-status');
+        if (el && message) el.innerText = message;
+    }
+
     function updatePlayerUI() {
         if (!state.session) return;
         const s = state.session;
@@ -1275,6 +1331,8 @@
         }
 
         updatePlayerUI();
+        // E7: evento discreto -> anuncia para leitores de tela.
+        announcePlayer(translations[state.lang].set_completed);
 
         // Sem descanso quando o exercício mudou ou o treino terminou
         // (mesmo comportamento de antes).
@@ -1325,6 +1383,8 @@
         updatePlayerUI();
         // Sessão pausada: manter a tela acesa é bloqueio desnecessário.
         syncWakeLock(false, 'paused');
+        // E7: anuncia o novo estado (a leitura do botão muda junto).
+        announcePlayer(translations[state.lang].workout_paused);
         return true;
     }
 
@@ -1340,6 +1400,8 @@
         updatePlayerUI();
         // Treino voltou a andar: a tela acesa volta junto.
         syncWakeLock(true, 'resumed');
+        // E7: anuncia o novo estado.
+        announcePlayer(translations[state.lang].workout_resumed);
         return true;
     }
 
@@ -1422,6 +1484,12 @@
             endRest('settle');            // venceu (inclusive durante suspensão)
             return;
         }
+        // Sprint 4 / E7: descanso CONGELADO (sessão pausada) não muda entre
+        // ticks — re-renderizar a cada 250 ms é trabalho jogado fora. O domínio
+        // segue dono do tempo: ao retomar, o próximo tick desenha o valor certo.
+        // (O interval NÃO é suspenso: preserva o invariante da E5 de exatamente
+        // um ticker em tela; aqui só se evita o render desnecessário.)
+        if (rest.status === 'paused') return;
         renderRest(rest);
     }
 
@@ -1430,6 +1498,14 @@
         stopRestTicker();
         document.getElementById('rest-overlay').classList.remove('active');
         state.restTimer.timer = null;
+        // E7.1: sem diálogo aberto não há contenção de foco (não fica pendurada).
+        releaseRestFocusTrap();
+        // E7: devolve o foco ao controle principal do Player (se ainda estamos
+        // nele), para a navegação por teclado não cair no <body>.
+        if (state.currentScreen === 'player') {
+            const cta = document.getElementById('btn-complete-set');
+            if (cta) cta.focus();
+        }
     }
 
     /**
@@ -1446,6 +1522,63 @@
             if (out && out.ok) state.restTimer.timer = out.timer;
         }
         closeRestOverlay();
+        // E7: o descanso terminou SOZINHO (venceu) -> anuncia. O "pular" é ação
+        // do usuário e não precisa de anúncio.
+        if (mode === 'settle') announcePlayer(translations[state.lang].rest_finished);
+    }
+
+    // ================= E7.1: DIÁLOGO MODAL DO DESCANSO =================
+    // Enquanto o overlay está aberto ele é um diálogo MODAL (`role=dialog`,
+    // `aria-modal=true`): o fundo não é alcançável por Tab/Shift+Tab e o foco
+    // fica CONTIDO nos controles do descanso. É local de propósito — nada de
+    // framework genérico de modais. O listener só existe com o overlay aberto.
+    let restTrapActive = false;
+
+    /** Controles focáveis do overlay, na ordem do DOM. */
+    function restFocusables() {
+        return Array.from(document.querySelectorAll(
+            '#rest-overlay button:not([disabled]), #rest-overlay [href], ' +
+            '#rest-overlay input:not([disabled]), #rest-overlay select:not([disabled]), ' +
+            '#rest-overlay textarea:not([disabled]), #rest-overlay [tabindex]:not([tabindex="-1"])'
+        ));
+    }
+
+    function restTrapKeydown(e) {
+        // Escape fecha pelo caminho SEGURO: encerra o descanso pelo DOMÍNIO
+        // (restSkip, idempotente e efêmero — o mesmo do botão "Pular"). Não há
+        // perda de dados; é o único "fechar" coerente do overlay.
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            skipRest();
+            return;
+        }
+        if (e.key !== 'Tab') return;
+        const items = restFocusables();
+        if (items.length === 0) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        const active = document.activeElement;
+        const inside = items.indexOf(active) !== -1;
+        if (e.shiftKey) {
+            if (!inside || active === first) { e.preventDefault(); last.focus(); }
+        } else if (!inside || active === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    }
+
+    /** Liga a contenção (idempotente: nunca registra o listener duas vezes). */
+    function engageRestFocusTrap() {
+        if (restTrapActive) return;
+        restTrapActive = true;
+        document.addEventListener('keydown', restTrapKeydown, true);
+    }
+
+    /** Desliga a contenção — chamado em TODO fechamento (não fica pendurada). */
+    function releaseRestFocusTrap() {
+        if (!restTrapActive) return;
+        restTrapActive = false;
+        document.removeEventListener('keydown', restTrapKeydown, true);
     }
 
     function startRestTimer(seconds) {
@@ -1458,6 +1591,12 @@
         document.getElementById('rest-overlay').classList.add('active');
         renderRest(restSnapshot(new Date()));
         startRestTicker();
+        // E7: leva o foco ao primeiro controle do overlay (navegação por teclado
+        // entra na sobreposição em vez de ficar presa atrás dela).
+        const firstRestControl = document.getElementById('btn-rest-increase');
+        if (firstRestControl) firstRestControl.focus();
+        // E7.1: com o foco dentro, o overlay passa a CONTER o Tab (diálogo modal).
+        engageRestFocusTrap();
         return true;
     }
 
@@ -1776,6 +1915,9 @@
     document.addEventListener('DOMContentLoaded', () => {
         I18n.syncDocument(I18n.getLocale());
         I18n.applyTranslations();
+        // E7: nomes acessíveis dos controles simbólicos do Player (+15s/−15s/✕).
+        applyPlayerA11yLabels();
+        I18n.onChange(() => applyPlayerA11yLabels());
 
         // Sprint 4: se havia uma sessão de treino em andamento, oferece
         // retomar ou descartar (o estado já veio sanitizado pelo domínio).

@@ -181,7 +181,7 @@ function testI18n() {
   suite("I18n");
 
   ok("3 idiomas", I.LOCALES.join(",") === "pt,en,es");
-  eq("52 chaves (49 + 3 do Player na E5: pausa/retomada)", I.keys().length, 52);
+  eq("58 chaves (52 da E5 + 6 da E7: a11y do Player)", I.keys().length, 58);
 
   const ptKeys = Object.keys(I.dict.pt).sort();
   const enKeys = Object.keys(I.dict.en).sort();
@@ -2153,6 +2153,146 @@ function testWiring() {
 }
 
 // ---------------------------------------------------------------------------
+// Player: responsividade e acessibilidade (E7)
+// ---------------------------------------------------------------------------
+function testWorkoutPlayerE7() {
+  suite("Player: responsividade e acessibilidade (E7)");
+
+  const html = fs.readFileSync(path.join(ROOT, "TreinoTracker_DeepSeek.html"), "utf8");
+
+  // --- i18n das chaves novas (pt/en/es) ------------------------------------
+  const sb = makeSandbox();
+  loadModules(sb, ["js/i18n.js"]);
+  const dict = sb.I18n.dict;
+  ["rest_decrease", "rest_increase", "exit_workout", "workout_resumed", "set_completed", "rest_finished"]
+    .forEach((k) => {
+      ok("i18n '" + k + "' nos 3 idiomas",
+        ["pt", "en", "es"].every((l) => dict[l] && typeof dict[l][k] === "string" &&
+          dict[l][k].length > 0 && dict[l][k] !== k));
+    });
+  // WCAG 2.5.3 (Label in Name): o nome acessível dos ± DEVE conter o texto visível.
+  ["pt", "en", "es"].forEach((l) => {
+    ok("i18n '" + l + "': rótulo dos ± contém o texto visível",
+      dict[l].rest_decrease.indexOf("- 15s") === 0 && dict[l].rest_increase.indexOf("+ 15s") === 0);
+  });
+
+  // --- região viva: anúncio por EVENTO, nunca pelo ticker ------------------
+  ok("a11y: região viva de status no Player (role=status / aria-live=polite)",
+    /<div id="player-status"[^>]*class="sr-only"[^>]*role="status"[^>]*aria-live="polite"/.test(html) &&
+      html.indexOf('id="player-status"') > html.indexOf('id="screen-player"') &&
+      html.indexOf('id="player-status"') < html.indexOf('<!-- ================= TELA 10'));
+  ok("a11y: o visor do descanso NÃO é região viva (sem spam a cada 250 ms)",
+    !/id="rest-timer-display"[^>]*aria-live/.test(html) && !/aria-live[^>]*id="rest-timer-display"/.test(html));
+  const pauseBody = (html.match(/function pauseWorkout\(\)[\s\S]*?\n    \}/) || [""])[0];
+  const resumeBody = (html.match(/function resumeWorkout\(now\)[\s\S]*?\n    \}/) || [""])[0];
+  const endRestBody = (html.match(/function endRest\(mode\)[\s\S]*?\n    \}/) || [""])[0];
+  const tickBody = (html.match(/function tickRest\(\)[\s\S]*?\n    \}/) || [""])[0];
+  const renderBody = (html.match(/function renderRest\(rest\)[\s\S]*?\n    \}/) || [""])[0];
+  ok("a11y: pausa anuncia o estado (workout_paused)",
+    pauseBody.includes("announcePlayer(translations[state.lang].workout_paused)"));
+  ok("a11y: retomada anuncia o estado (workout_resumed)",
+    resumeBody.includes("announcePlayer(translations[state.lang].workout_resumed)"));
+  ok("a11y: série concluída anuncia (set_completed)",
+    html.includes("announcePlayer(translations[state.lang].set_completed)"));
+  ok("a11y: descanso que vence sozinho anuncia (rest_finished)",
+    endRestBody.includes("announcePlayer(translations[state.lang].rest_finished)") &&
+      /mode === 'settle'/.test(endRestBody));
+  ok("a11y: o ticker/render do descanso NÃO anuncia (sem ruído por tick)",
+    !tickBody.includes("announcePlayer(") && !renderBody.includes("announcePlayer("));
+
+  // --- nomes acessíveis de controles simbólicos ----------------------------
+  ok("a11y: nome acessível do ✕ (sair do treino) via i18n",
+    /<button class="btn btn-icon"[^>]*data-i18n-aria-label="exit_workout"[^>]*>✕<\/button>/.test(html));
+  ok("a11y: nomes acessíveis dos ±15s via i18n",
+    /id="btn-rest-decrease"[^>]*data-i18n-aria-label="rest_decrease"/.test(html) &&
+      /id="btn-rest-increase"[^>]*data-i18n-aria-label="rest_increase"/.test(html) &&
+      html.includes('onclick="adjustRestTime(-15)"') && html.includes('onclick="adjustRestTime(15)"'));
+  ok("a11y: helper aplica os rótulos e é reaplicado na troca de idioma",
+    html.includes("function applyPlayerA11yLabels()") &&
+      html.includes("querySelectorAll('[data-i18n-aria-label]')") &&
+      html.includes("I18n.onChange(() => applyPlayerA11yLabels())") &&
+      /I18n\.applyTranslations\(\);\s*\n\s*\/\/ E7:[^\n]*\n\s*applyPlayerA11yLabels\(\);/.test(html.replace(/\r/g, "")));
+  ok("a11y: CSS .sr-only presente (conteúdo só para leitor de tela)",
+    /\.sr-only\s*\{[^}]*clip:\s*rect\(0 0 0 0\)/.test(html));
+
+  // --- foco visível / ordem de foco (escopo Player) ------------------------
+  ok("a11y: foco visível (focus-visible) no Player e suas sobreposições",
+    /#screen-player :focus-visible[\s\S]{0,260}?outline:\s*2px solid var\(--primary\)/.test(html) &&
+      html.includes("#rest-overlay :focus-visible") &&
+      html.includes("#exit-modal :focus-visible") &&
+      html.includes("#resume-modal :focus-visible"));
+  ok("a11y: abrir o descanso leva o foco ao primeiro controle do overlay",
+    /getElementById\('btn-rest-increase'\)[\s\S]{0,80}?firstRestControl\.focus\(\)/.test(html));
+  ok("a11y: fechar o descanso devolve o foco ao CTA do Player",
+    /function closeRestOverlay\(\)[\s\S]{0,420}?state\.currentScreen === 'player'[\s\S]{0,160}?btn-complete-set[\s\S]{0,40}?\.focus\(\)/.test(html));
+
+  // --- responsividade (sem media query redundante) ------------------------
+  ok("resp: círculo do descanso cabe em 320 px (min(280px, 72vw))",
+    /\.rest-circle-container\s*\{[^}]*width:\s*min\(280px,\s*72vw\)[^}]*height:\s*min\(280px,\s*72vw\)/.test(html));
+  ok("resp: visor do descanso escala com o círculo (clamp)",
+    /\.rest-time-text\s*\{[^}]*font-size:\s*clamp\(2\.4rem,\s*15vw,\s*4rem\)/.test(html));
+  ok("resp: overlay rola em telas curtas (sem corte)",
+    /#rest-overlay\s*\{[^}]*overflow-y:\s*auto/.test(html));
+  ok("resp: alvos de toque >= 44 px no Player (escopo por ID)",
+    /#screen-player \.btn-sm,\s*#screen-player \.btn-icon\s*\{[^}]*min-height:\s*44px/.test(html) &&
+      /#rest-overlay \.btn\s*\{[^}]*min-height:\s*48px/.test(html));
+
+  // --- ticker: sem render repetido enquanto o descanso está congelado ------
+  ok("ticker: descanso PAUSADO não re-renderiza a cada 250 ms",
+    /if \(rest\.status === 'paused'\) return;/.test(tickBody));
+  ok("ticker: o intervalo continua único e suspender não é necessário",
+    (html.match(/setInterval\(/g) || []).length === 1 && html.includes("setInterval(tickRest, REST_TICK_MS)"));
+}
+
+// ---------------------------------------------------------------------------
+// Overlay de descanso como diálogo modal (E7.1)
+// ---------------------------------------------------------------------------
+function testRestOverlayDialogE71() {
+  suite("Overlay de descanso: diálogo modal (E7.1)");
+
+  const html = fs.readFileSync(path.join(ROOT, "TreinoTracker_DeepSeek.html"), "utf8");
+
+  const overlayTag = (html.match(/<div id="rest-overlay"[^>]*>/) || [""])[0];
+  const keydownBody = (html.match(/function restTrapKeydown\(e\)[\s\S]*?\n    \}/) || [""])[0];
+  const engageBody = (html.match(/function engageRestFocusTrap\(\)[\s\S]*?\n    \}/) || [""])[0];
+  const releaseBody = (html.match(/function releaseRestFocusTrap\(\)[\s\S]*?\n    \}/) || [""])[0];
+  const startBody = (html.match(/function startRestTimer\(seconds\)[\s\S]*?\n    \}/) || [""])[0];
+  const closeBody = (html.match(/function closeRestOverlay\(\)[\s\S]*?\n    \}/) || [""])[0];
+
+  // --- semântica do diálogo ------------------------------------------------
+  ok("semântica: overlay é role=dialog com aria-modal e nome pelo próprio título",
+    /role="dialog"/.test(overlayTag) && /aria-modal="true"/.test(overlayTag) &&
+      /aria-labelledby="rest-overlay-label"/.test(overlayTag) &&
+      /id="rest-overlay-label"[^>]*data-i18n="rest_label"/.test(html));
+
+  // --- contenção de foco ---------------------------------------------------
+  ok("foco: lista de focáveis restrita ao overlay",
+    html.includes("function restFocusables()") &&
+      html.includes("'#rest-overlay button:not([disabled]), #rest-overlay [href], '"));
+  ok("foco: Tab no último controle volta ao primeiro (e Shift+Tab no primeiro vai ao último)",
+    /if \(e\.key !== 'Tab'\) return;/.test(keydownBody) &&
+      /e\.shiftKey/.test(keydownBody) && /active === first/.test(keydownBody) &&
+      /active === last/.test(keydownBody) && /last\.focus\(\)/.test(keydownBody) &&
+      /first\.focus\(\)/.test(keydownBody));
+  ok("foco: foco fora do overlay é trazido para dentro",
+    /const inside = items\.indexOf\(active\) !== -1;/.test(keydownBody) &&
+      /!inside/.test(keydownBody));
+  ok("foco: Escape fecha pelo caminho seguro (skipRest, mesmo do Pular)",
+    /if \(e\.key === 'Escape'\)/.test(keydownBody) && /skipRest\(\);/.test(keydownBody));
+  ok("foco: abrir o descanso engaja a contenção",
+    startBody.includes("engageRestFocusTrap();"));
+  ok("foco: fechar o descanso SEMPRE libera a contenção",
+    closeBody.includes("releaseRestFocusTrap();"));
+  ok("foco: contenção é idempotente e simétrica (add/remove com captura)",
+    /if \(restTrapActive\) return;[\s\S]{0,60}?restTrapActive = true;[\s\S]{0,80}?addEventListener\('keydown', restTrapKeydown, true\)/.test(engageBody) &&
+      /if \(!restTrapActive\) return;[\s\S]{0,60}?restTrapActive = false;[\s\S]{0,80}?removeEventListener\('keydown', restTrapKeydown, true\)/.test(releaseBody));
+  ok("foco: um único ponto de engajamento/liberação na UI",
+    (html.match(/engageRestFocusTrap\(\);/g) || []).length === 1 &&
+      (html.match(/releaseRestFocusTrap\(\);/g) || []).length === 1 &&
+      /function engageRestFocusTrap\(\)/.test(html) && /function releaseRestFocusTrap\(\)/.test(html));
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 (async function main() {
@@ -2174,6 +2314,8 @@ function testWiring() {
   testWorkoutControllerRest();
   testWorkoutPlayerE5();
   testActionGuard();
+  testWorkoutPlayerE7();
+  testRestOverlayDialogE71();
   testWiring();
 
   console.log("\n==========================================");

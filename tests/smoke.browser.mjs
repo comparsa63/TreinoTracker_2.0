@@ -1123,6 +1123,192 @@ async function main() {
       auditE6.ticker === false && auditE6.timer === false && auditE6.home === true,
     JSON.stringify(auditE6));
 
+  // --- E7: acessibilidade (ARIA do Player) ---------------------------------
+  const ariaLabelsE7 = await ev(`(function(){
+    if (state.session) discardAndExit();
+    state.session = null;
+    state.editingRoutineId = state.routines[0].id;
+    startWorkoutSession();
+    var labels = {};
+    ['pt','en','es'].forEach(function(l){
+      I18n.setLocale(l);
+      labels[l] = {
+        decrease: document.getElementById('btn-rest-decrease').getAttribute('aria-label'),
+        increase: document.getElementById('btn-rest-increase').getAttribute('aria-label'),
+        exit: document.querySelector('#screen-player .btn-icon').getAttribute('aria-label'),
+        esperadoDecrease: translations[l].rest_decrease,
+        esperadoIncrease: translations[l].rest_increase,
+        esperadoExit: translations[l].exit_workout
+      };
+    });
+    I18n.setLocale('pt');
+    document.getElementById('player-status').innerText = '';
+    togglePauseWorkout();                            // pausa (1ª vez: aceita)
+    var paused = document.getElementById('player-status').innerText;
+    var display = document.getElementById('rest-timer-display');
+    return {
+      labels: labels, paused: paused,
+      esperadoPaused: translations.pt.workout_paused,
+      displayLive: display.getAttribute('aria-live'),
+      displayInLive: !!display.closest('[aria-live]')
+    };
+  })()`);
+  check("E7: ±15s e ✕ têm nome acessível localizado (pt/en/es)",
+    ["pt", "en", "es"].every((l) => {
+      const L = ariaLabelsE7.labels[l];
+      return L.decrease === L.esperadoDecrease && L.increase === L.esperadoIncrease &&
+        L.exit === L.esperadoExit && L.decrease.indexOf("- 15s") === 0 && L.increase.indexOf("+ 15s") === 0;
+    }),
+    JSON.stringify(ariaLabelsE7.labels.pt));
+  check("E7: pausar anuncia o estado na região viva",
+    ariaLabelsE7.paused === ariaLabelsE7.esperadoPaused, ariaLabelsE7.paused);
+  check("E7: o visor do descanso não é região viva (sem ruído por tick)",
+    ariaLabelsE7.displayLive === null && ariaLabelsE7.displayInLive === false,
+    JSON.stringify({ live: ariaLabelsE7.displayLive, inLive: ariaLabelsE7.displayInLive }));
+
+  await sleep(TAP_WAIT_MS);                          // E6: toque seguinte é de verdade
+  const resumeA11yE7 = await ev(`(function(){
+    togglePauseWorkout();                            // retoma
+    return { anuncio: document.getElementById('player-status').innerText,
+             esperado: translations.pt.workout_resumed, status: state.session.status };
+  })()`);
+  check("E7: retomar anuncia o estado na região viva",
+    resumeA11yE7.anuncio === resumeA11yE7.esperado && resumeA11yE7.status === 'active',
+    JSON.stringify(resumeA11yE7));
+
+  const focoE7 = await ev(`(function(){
+    // Navegação por teclado: o foco ENTRA no overlay ao abrir e VOLTA ao CTA ao
+    // fechar (não fica preso atrás do overlay nem cai no <body>).
+    startRestTimer(30);
+    var aoAbrir = document.activeElement ? document.activeElement.id : null;
+    skipRest();
+    var aoFechar = document.activeElement ? document.activeElement.id : null;
+    return { aoAbrir: aoAbrir, aoFechar: aoFechar, tela: state.currentScreen };
+  })()`);
+  check("E7: foco entra no overlay ao abrir e volta ao CTA ao fechar",
+    focoE7.aoAbrir === 'btn-rest-increase' && focoE7.aoFechar === 'btn-complete-set' &&
+      focoE7.tela === 'player',
+    JSON.stringify(focoE7));
+
+  // E7.1: o overlay aberto é um diálogo MODAL com contenção de foco por Tab.
+  const trapE7 = await ev(`(function(){
+    startRestTimer(60);
+    var ov = document.getElementById('rest-overlay');
+    var btns = Array.prototype.slice.call(document.querySelectorAll('#rest-overlay button'));
+    var first = btns[0].id, last = btns[btns.length - 1].id;
+    function press(key, shift){
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: key, shiftKey: !!shift, bubbles: true, cancelable: true }));
+    }
+    var out = {
+      role: ov.getAttribute('role'), modal: ov.getAttribute('aria-modal'),
+      labelledby: ov.getAttribute('aria-labelledby'),
+      focusInicial: document.activeElement.id, trap: restTrapActive, first: first, last: last
+    };
+    btns[btns.length - 1].focus();                       // no ÚLTIMO controle
+    press('Tab', false);                                 // Tab -> volta ao PRIMEIRO
+    out.wrapForward = document.activeElement.id;
+    btns[0].focus();                                     // no PRIMEIRO
+    press('Tab', true);                                  // Shift+Tab -> vai ao ÚLTIMO
+    out.wrapBackward = document.activeElement.id;
+    document.getElementById('btn-complete-set').focus(); // foco FORA do overlay
+    press('Tab', false);                                 // Tab -> traz de volta
+    out.pulledIn = document.activeElement.id;
+    return out;
+  })()`);
+  check("E7.1: overlay aberto = diálogo modal com foco inicial e Tab contido",
+    trapE7.role === 'dialog' && trapE7.modal === 'true' && trapE7.labelledby === 'rest-overlay-label' &&
+      trapE7.focusInicial === 'btn-rest-increase' && trapE7.trap === true &&
+      trapE7.wrapForward === trapE7.first && trapE7.wrapBackward === trapE7.last &&
+      trapE7.pulledIn === trapE7.first,
+    JSON.stringify(trapE7));
+
+  const trapCloseE7 = await ev(`(function(){
+    // Escape fecha pelo caminho seguro (skipRest) e NÃO deixa a contenção presa.
+    var ov = document.getElementById('rest-overlay');
+    var trapAntes = restTrapActive;
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    var out = {
+      trapAntes: trapAntes, overlay: ov.classList.contains('active'), trap: restTrapActive,
+      timer: state.restTimer.timer === null, foco: document.activeElement.id,
+      sessao: state.session ? state.session.status : null
+    };
+    // Fechado: um Tab NÃO deve mais mexer no foco (contenção liberada).
+    document.getElementById('btn-complete-set').focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    out.focoAposTab = document.activeElement.id;
+    return out;
+  })()`);
+  check("E7.1: Escape fecha com segurança, libera a contenção e devolve o foco",
+    trapCloseE7.trapAntes === true && trapCloseE7.overlay === false && trapCloseE7.trap === false &&
+      trapCloseE7.timer === true && trapCloseE7.foco === 'btn-complete-set' &&
+      trapCloseE7.focoAposTab === 'btn-complete-set' && trapCloseE7.sessao === 'active',
+    JSON.stringify(trapCloseE7));
+
+  // --- E7: responsividade do Player (medição real em 5 larguras) -----------
+  const E7_WIDTHS = [
+    { w: 320, h: 568 }, { w: 360, h: 640 }, { w: 390, h: 844 }, { w: 430, h: 932 }, { w: 1024, h: 768 },
+  ];
+  for (const vp of E7_WIDTHS) {
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      width: vp.w, height: vp.h, deviceScaleFactor: 1, mobile: vp.w < 600,
+      screenWidth: vp.w, screenHeight: vp.h,
+    });
+    // Monta o Player + descanso aberto e espera a animação de entrada terminar
+    // (o .screen usa fadeIn com transform; medir durante isso desloca o rect).
+    await ev(`(function(){
+      if (state.session) discardAndExit();
+      state.session = null;
+      state.editingRoutineId = state.routines[0].id;
+      startWorkoutSession();
+      document.getElementById('toggle-auto-rest').checked = false;
+      state.autoRestEnabled = false;
+      startRestTimer(60);
+      return true;
+    })()`);
+    await sleep(450);
+    const probe = await ev(`(function(){
+      var vw = window.innerWidth;
+      function rect(sel){ var el = document.querySelector(sel); if (!el) return null;
+        var b = el.getBoundingClientRect(); return { l:b.left, r:b.right, w:b.width, h:b.height }; }
+      var overlay = document.getElementById('rest-overlay');
+      return {
+        vw: vw,
+        app: rect('#app'),
+        cta: rect('#btn-complete-set'),
+        pause: rect('#btn-pause-resume'),
+        exit: rect('#screen-player .btn-icon'),
+        adjust: rect('#screen-player .btn-adjust'),
+        circle: rect('#rest-overlay .rest-circle-container'),
+        minus: rect('#btn-rest-decrease'),
+        ovScrollW: overlay.scrollWidth, ovClientW: overlay.clientWidth,
+        ovScrollH: overlay.scrollHeight, ovClientH: overlay.clientHeight,
+        docScrollW: document.documentElement.scrollWidth
+      };
+    })()`);
+    await ev(`(function(){ skipRest(); discardAndExit(); return true; })()`);
+
+    const p = probe;
+    const tag = vp.w + "x" + vp.h;
+    const dentroApp = p.cta.l >= p.app.l - 1 && p.cta.r <= p.app.r + 1;
+    check(`E7 ${tag}: sem rolagem horizontal`,
+      p.docScrollW <= p.vw + 1 && p.ovScrollW <= p.ovClientW + 1 && p.app.r <= p.vw + 1,
+      JSON.stringify({ doc: p.docScrollW, vw: p.vw, ovW: p.ovScrollW + "/" + p.ovClientW }));
+    check(`E7 ${tag}: overlay do descanso cabe na tela (sem corte)`,
+      p.circle.r <= p.vw + 1 && p.minus.l >= -1 && p.minus.r <= p.vw + 1 && p.ovScrollH <= p.ovClientH + 1,
+      JSON.stringify({ circle: p.circle.w, ovH: p.ovScrollH + "/" + p.ovClientH }));
+    check(`E7 ${tag}: alvos de toque >= 44 px e CTA alinhado à coluna do app`,
+      p.pause.h >= 44 && p.exit.w >= 44 && p.exit.h >= 44 && p.adjust.h >= 44 && p.cta.h >= 44 && dentroApp,
+      JSON.stringify({ pause: p.pause.h, exit: p.exit.w + "x" + p.exit.h, adjust: p.adjust.h, cta: p.cta.h, dentroApp: dentroApp }));
+    if (vp.w >= 900) {
+      check(`E7 ${tag}: app centrado e limitado a 480 px`,
+        p.app.w <= 480 && Math.abs(p.app.l - (p.vw - p.app.w) / 2) <= 2,
+        JSON.stringify({ appW: p.app.w, appL: p.app.l }));
+    }
+  }
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    width: 390, height: 844, deviceScaleFactor: 2, mobile: true, screenWidth: 390, screenHeight: 844,
+  });
+
   // --- Erros de JS ----------------------------------------------------------
   const realErrors = jsErrors.filter((e) => !/unsplash|net::ERR|Failed to load resource|ERR_BLOCKED/i.test(e));
   check("nenhum erro de JS no console", realErrors.length === 0, realErrors.slice(0, 3).join(" | "));
