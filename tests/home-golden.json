@@ -1,39 +1,77 @@
 {
-  "generatedAt": "2026-10-18T03:55:14.733Z",
+  "generatedAt": "2026-10-19T03:54:50.285Z",
   "source": "TreinoTracker_DeepSeek.html",
   "frozen": {
-    "home": "<section id=\"screen-home\" class=\"screen active\">\n        <header style=\"display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;\">\n            <div class=\"logo\">Treino<span>Tracker</span></div>\n            <button class=\"btn btn-sm\" onclick=\"toggleLanguage()\"><span id=\"lang-text\">PT</span></button>\n        </header>\n        <div style=\"margin-bottom: 24px;\">\n            <h2 data-i18n=\"greeting\">Olá, Atleta</h2>\n            <p class=\"text-muted\" data-i18n=\"greeting_sub\">Pronto para o treino de hoje?</p>\n        </div>\n        <div class=\"card-highlight\">\n            <h3 data-i18n=\"today_workout\">Treino A — Peito e Tríceps</h3>\n            <div style=\"display: flex; gap: 16px; margin: 16px 0;\">\n                <div><span class=\"text-muted\" style=\"font-size: 0.8rem;\" data-i18n=\"exercises\">Exercícios</span><p style=\"font-weight: 700;\">6</p></div>\n                <div><span class=\"text-muted\" style=\"font-size: 0.8rem;\" data-i18n=\"duration\">Duração</span><p style=\"font-weight: 700;\">45 min</p></div>\n            </div>\n            <button class=\"btn btn-primary\" style=\"width: 100%;\" onclick=\"navigate('workouts')\" data-i18n=\"start_workout\">INICIAR TREINO</button>\n        </div>\n        <div style=\"margin-top: 32px;\">\n            <h4 style=\"margin-bottom: 12px; font-size: 1rem;\" data-i18n=\"last_workout\">Último Treino</h4>\n            <div class=\"last-workout\">\n                <div><h4 style=\"font-size: 1rem;\">Treino B — Costas e Bíceps</h4><p class=\"text-muted\" style=\"font-size: 0.8rem;\">Ontem • 50 min</p></div>\n                <div class=\"history-status\" data-i18n=\"completed\">Concluído</div>\n            </div>\n        </div>\n    </section>",
+    "home": "<section id=\"screen-home\" class=\"screen active\">\n        <header style=\"display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;\">\n            <div class=\"logo\">Treino<span>Tracker</span></div>\n            <button class=\"btn btn-sm\" onclick=\"toggleLanguage()\"><span id=\"lang-text\">PT</span></button>\n        </header>\n        <div style=\"margin-bottom: 24px;\">\n            <h2 data-i18n=\"greeting\">Olá, Atleta</h2>\n            <p class=\"text-muted\" data-i18n=\"greeting_sub\">Pronto para o treino de hoje?</p>\n        </div>\n        <div class=\"card-highlight\">\n            <p class=\"text-muted\" style=\"font-size: 0.8rem; margin-bottom: 4px;\" data-i18n=\"today_workout\">Treino de hoje</p>\n            <h3 id=\"home-today-name\">—</h3>\n            <div style=\"display: flex; gap: 16px; margin: 16px 0;\">\n                <div><span class=\"text-muted\" style=\"font-size: 0.8rem;\" data-i18n=\"exercises\">Exercícios</span><p id=\"home-today-exercises\" style=\"font-weight: 700;\">—</p></div>\n                <div><span class=\"text-muted\" style=\"font-size: 0.8rem;\" data-i18n=\"duration\">Duração</span><p id=\"home-today-duration\" style=\"font-weight: 700;\">—</p></div>\n            </div>\n            <button class=\"btn btn-primary\" style=\"width: 100%;\" onclick=\"navigate('workouts')\" data-i18n=\"start_workout\">INICIAR TREINO</button>\n        </div>\n        <section style=\"margin-top: 32px;\" aria-labelledby=\"home-recent-title\">\n            <h4 id=\"home-recent-title\" style=\"margin-bottom: 12px; font-size: 1rem;\" data-i18n=\"recent_workouts\">Últimos treinos</h4>\n            <!-- Sprint 5.1.2: faixa horizontal com os últimos treinos CONCLUÍDOS do\n                 histórico real (máx. 7), do mais recente para o mais antigo. Nada é\n                 escrito aqui de forma estática: renderHome preenche os cards ou\n                 mostra o estado vazio. `tabindex=\"0\"` deixa a faixa rolável por\n                 teclado (setas), com foco visível. -->\n            <div id=\"home-recent-strip\" class=\"recent-strip\" role=\"list\" tabindex=\"0\" data-i18n-label=\"recent_strip_label\"></div>\n            <p id=\"home-recent-empty\" class=\"recent-empty\" data-i18n=\"no_recent_workouts\">Nenhum treino concluído ainda</p>\n            <button class=\"btn btn-sm\" style=\"width: 100%; margin-top: 12px;\" onclick=\"navigate('history')\" data-i18n=\"see_full_history\">Ver histórico completo</button>\n        </section>\n        <section class=\"home-insights\" aria-labelledby=\"home-weekly-title\">\n            <h3 id=\"home-weekly-title\" class=\"home-insights-title\" data-i18n=\"weekly_summary\">Resumo da semana</h3>\n            <div id=\"home-weekly-strip\" class=\"weekly-strip\" role=\"list\" data-i18n-label=\"weekly_strip_label\"></div>\n            <div class=\"home-metrics\">\n                <article class=\"home-metric\">\n                    <p class=\"home-metric-label\" data-i18n=\"cardio_week\">Cardio da semana</p>\n                    <p id=\"home-cardio-value\" class=\"home-metric-value\">0 / 150 min</p>\n                </article>\n                <article class=\"home-metric\">\n                    <p class=\"home-metric-label\" data-i18n=\"consecutive_days\">Dias seguidos</p>\n                    <p id=\"home-streak-value\" class=\"home-metric-value\">0 dias</p>\n                </article>\n            </div>\n        </section>\n    </section>",
     "css": {
       ".logo": "        .logo { font-size: 1.5rem; font-weight: 800; letter-spacing: -1px; }",
       ".logo span": "        .logo span { color: var(--primary); }",
       ".card-highlight": "        .card-highlight {\n            background: linear-gradient(145deg, var(--card-bg), #0f131a);\n            border-radius: var(--border-radius);\n            padding: 24px;\n            border: 1px solid rgba(0, 255, 85, 0.1);\n            margin-bottom: 24px;\n            position: relative;\n            overflow: hidden;\n        }",
       ".card-highlight::before": "        .card-highlight::before {\n            content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--primary);\n        }",
-      ".last-workout": "        .last-workout {\n            background: var(--card-bg); padding: 16px; border-radius: var(--border-radius-sm);\n            display: flex; justify-content: space-between; align-items: center;\n        }"
+      ".last-workout": "        .last-workout {\n            background: var(--card-bg); padding: 16px; border-radius: var(--border-radius-sm);\n            display: flex; justify-content: space-between; align-items: center;\n        }",
+      ".home-insights": "        .home-insights { margin-top: 28px; }",
+      ".weekly-strip": "        .weekly-strip { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px; scrollbar-width: thin; scroll-snap-type: x proximity; }",
+      ".weekly-day": "        .weekly-day { flex: 0 0 76px; min-height: 102px; padding: 10px 8px; border-radius: var(--border-radius-sm); background: var(--card-bg); display: flex; flex-direction: column; gap: 5px; scroll-snap-align: start; }",
+      ".home-metrics": "        .home-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }",
+      ".home-metric": "        .home-metric { background: var(--card-bg); border-radius: var(--border-radius-sm); padding: 14px; }",
+      ".recent-strip": "        .recent-strip { display: flex; gap: 12px; overflow-x: auto; padding: 2px 2px 10px; scrollbar-width: thin; scroll-snap-type: x proximity; }",
+      ".recent-strip:focus-visible": "        .recent-strip:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: var(--border-radius-sm); }",
+      ".recent-card": "        .recent-card { flex: 0 0 calc((100% - 24px) / 2.25); min-width: 0; min-height: 96px; padding: 14px; border-radius: var(--border-radius-sm); background: var(--card-bg); display: flex; flex-direction: column; gap: 4px; scroll-snap-align: start; }",
+      ".recent-card-name": "        .recent-card-name { font-size: 0.9rem; font-weight: 700; overflow-wrap: anywhere; }",
+      ".recent-card-meta": "        .recent-card-meta { color: var(--text-muted); font-size: 0.75rem; }",
+      ".recent-empty": "        .recent-empty { color: var(--text-muted); font-size: 0.85rem; padding: 4px 2px; }"
     }
   },
   "fingerprints": {
-    "home": "1a2717d45953eb400c99059b66bed4b3aab8e937adf622a5d292c447a133d830",
+    "home": "fb92bd7fe40e7af34ebb039e92f6f78d6a36b9997362fe0e924960467b4f13d7",
     "css:.logo": "79fcb28accd7748dfbee53c2d8bde7abdd9e54ebb8e0d50c4ed0750bb05f956e",
     "css:.logo span": "f0baa141a1e3ee24c88ad5c12a3886ac8fa45e7132c8f86790a1442d6f5b8aae",
     "css:.card-highlight": "cc0b1493568dfd1f7780439938fbf871a4278d20df594ff7e4afd6ec032abe1f",
     "css:.card-highlight::before": "24bd381cd9569d2a11a33ed1814f244f54fb54edacc0c32434e095848712f09e",
-    "css:.last-workout": "6eb3d371e47c36ec045c858ff6c6af7984ea4fda6a4f1cf58a27d54eaf77a2b9"
+    "css:.last-workout": "6eb3d371e47c36ec045c858ff6c6af7984ea4fda6a4f1cf58a27d54eaf77a2b9",
+    "css:.home-insights": "9fa9afabd390403002a47e9a9c833f3308867f1d108b97844f130ee9ca1d06b5",
+    "css:.weekly-strip": "db805d19c7f8cfc05080de74603db70f263390d96e6e2fc63b49fc435e5c92e6",
+    "css:.weekly-day": "7c6931ab335e1a59061454c21e3c26836c1c130634d5fa705cd6f8e457ca0aa7",
+    "css:.home-metrics": "e3e428b30fc339604086a1f55ebc7925a14438f33097f5d0e354aa8941e29b95",
+    "css:.home-metric": "a4f83573e3ab124928e5a5311ff9f21b91f93f8a4a26f09f1ebb0cc37a659a11",
+    "css:.recent-strip": "ceb058c09ae004f50597a120952fee0196f4d6ccb51a3057d2171391d7a52499",
+    "css:.recent-strip:focus-visible": "f12f4560e6d970fb4dec07e6c9349f09f660886d383c17ed1e68bffef26e55e4",
+    "css:.recent-card": "29575a70a6f3fcb40e51a20a4fcce46eec76b3e248effd77943f8453cc321a7c",
+    "css:.recent-card-name": "5f2da816c73fe606c4fc32a26fec41b7fe73b575b5273d8f6c0a764da2dbc1a7",
+    "css:.recent-card-meta": "a4ea3545d9f479dfd3d7886674a074651d8ec143d2c8a7aa4e95fbbe210c8365",
+    "css:.recent-empty": "9abf43e5fc58c89c39cb10c4553f42b59a885e89236d676a5df15091d0c5f821"
   },
   "sizes": {
-    "home": 1705,
+    "home": 3335,
     "css": {
       ".logo": 76,
       ".logo span": 45,
       ".card-highlight": 333,
       ".card-highlight::before": 159,
-      ".last-workout": 208
+      ".last-workout": 208,
+      ".home-insights": 44,
+      ".weekly-strip": 145,
+      ".weekly-day": 220,
+      ".home-metrics": 100,
+      ".home-metric": 107,
+      ".recent-strip": 146,
+      ".recent-strip:focus-visible": 135,
+      ".recent-card": 252,
+      ".recent-card-name": 91,
+      ".recent-card-meta": 75,
+      ".recent-empty": 89
     }
   },
   "homeI18n": {
-    "completed": {
-      "pt": "Concluído",
-      "en": "Completed",
-      "es": "Completado"
+    "cardio_week": {
+      "pt": "Cardio da semana",
+      "en": "Weekly cardio",
+      "es": "Cardio semanal"
+    },
+    "consecutive_days": {
+      "pt": "Dias seguidos",
+      "en": "Consecutive days",
+      "es": "Días seguidos"
     },
     "duration": {
       "pt": "Duração",
@@ -55,10 +93,20 @@
       "en": "Ready for today's workout?",
       "es": "¿Listo para el entrenamiento de hoy?"
     },
-    "last_workout": {
-      "pt": "Último Treino",
-      "en": "Last Workout",
-      "es": "Último Entreno"
+    "no_recent_workouts": {
+      "pt": "Nenhum treino concluído ainda",
+      "en": "No completed workouts yet",
+      "es": "Aún no hay entrenos completados"
+    },
+    "recent_workouts": {
+      "pt": "Últimos treinos",
+      "en": "Recent workouts",
+      "es": "Entrenos recientes"
+    },
+    "see_full_history": {
+      "pt": "Ver histórico completo",
+      "en": "See full history",
+      "es": "Ver historial completo"
     },
     "start_workout": {
       "pt": "INICIAR TREINO",
@@ -66,9 +114,14 @@
       "es": "COMENZAR ENTRENO"
     },
     "today_workout": {
-      "pt": "Treino A — Peito e Tríceps",
-      "en": "Workout A — Chest & Triceps",
-      "es": "Entreno A — Pecho y Tríceps"
+      "pt": "Treino de hoje",
+      "en": "Today's workout",
+      "es": "Entreno de hoy"
+    },
+    "weekly_summary": {
+      "pt": "Resumo da semana",
+      "en": "Weekly summary",
+      "es": "Resumen semanal"
     }
   }
 }

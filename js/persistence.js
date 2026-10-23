@@ -126,6 +126,11 @@
     }
     if (str(raw.routineId, null)) entry.routineId = raw.routineId;
     if (str(raw.letter, null)) entry.letter = raw.letter;
+    // Sprint 5.1: marcadores de MODALIDADE (aditivos). Sem eles o cardio seria
+    // reconhecido no resumo semanal em memória, mas perderia a marcação ao
+    // recarregar a página — e a leitura semanal ficaria errada após o reload.
+    if (str(raw.category, null)) entry.category = raw.category;
+    if (str(raw.type, null)) entry.type = raw.type;
     // Sprint 4: identidade estável da execução (aditiva). Precisa sobreviver ao
     // round-trip para que a deduplicação continue valendo após uma recarga.
     if (str(raw.sessionId, null)) entry.sessionId = raw.sessionId;
@@ -139,7 +144,12 @@
   function sanitizeSet(raw) {
     if (!raw || typeof raw !== "object") return null;
     const weight = Math.max(0, toNumber(raw.weight, toNumber(raw.carga, 0)));
-    const reps = Math.max(0, Math.round(toNumber(raw.reps, 0)));
+    const sourceReps = raw.reps != null ? raw.reps : raw.repeticoes;
+    const parsedReps = toNumber(sourceReps, null);
+    // Histórico enriquecido só representa séries efetivamente concluídas.
+    // Não promover `0` para `1` preserva os dados válidos sem inventar série.
+    if (parsedReps === null || parsedReps < 1) return null;
+    const reps = Math.round(parsedReps);
     return { weight, reps };
   }
 

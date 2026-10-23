@@ -181,7 +181,7 @@ function testI18n() {
   suite("I18n");
 
   ok("3 idiomas", I.LOCALES.join(",") === "pt,en,es");
-  eq("58 chaves (52 da E5 + 6 da E7: a11y do Player)", I.keys().length, 58);
+  eq("84 chaves (58 + 15 da Home semanal da E5.1 + 5 do card de hoje/último treino da E5.1.1 + 6 da faixa Últimos treinos da E5.1.2)", I.keys().length, 84);
 
   const ptKeys = Object.keys(I.dict.pt).sort();
   const enKeys = Object.keys(I.dict.en).sort();
@@ -491,6 +491,23 @@ function testUtilsDates() {
   ok("isSameWeek semanas diferentes", U.isSameWeek("2026-10-18", "2026-10-19") === false);
   ok("getWeekRange aceita Date", U.todayISO(U.getWeekRange(new Date("2026-10-18T12:00:00")).start) === "2026-10-12");
 
+  // Sprint 5.1.3 (M1): hoje/última semana só valem quando NADA foi passado — o
+  // argumento nunca pode ser ignorado em silêncio. Semanas de 2020/2021 provam
+  // isso sem depender de qual é a semana corrente (a checagem acima passava por
+  // coincidência quando a suíte rodava entre 12 e 18/10/2026).
+  ok("todayISO aceita Date de outro realm (sandbox/host) e epoch local",
+    U.todayISO(new Date("2026-10-18T12:00:00")) === "2026-10-18" &&
+    U.todayISO(new Date(2026, 9, 18, 12, 0, 0).getTime()) === "2026-10-18");
+  ok("todayISO aceita 'YYYY-MM-DD' e devolve ESSA data",
+    U.todayISO("2026-10-18") === "2026-10-18" && U.todayISO("2026-01-02") === "2026-01-02");
+  ok("todayISO sem argumento/inválido cai em hoje (ISO curto, sem lançar)",
+    /^\d{4}-\d{2}-\d{2}$/.test(U.todayISO()) && /^\d{4}-\d{2}-\d{2}$/.test(U.todayISO("ontem")) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(U.todayISO(null)) && /^\d{4}-\d{2}-\d{2}$/.test(U.todayISO(NaN)));
+  ok("getWeekRange: Date de outro realm e 'YYYY-MM-DD' concordam (argumento é respeitado)",
+    U.todayISO(U.getWeekRange(new Date("2020-02-05T12:00:00")).start) === "2020-02-03" &&
+    U.todayISO(U.getWeekRange("2020-02-05").start) === "2020-02-03" &&
+    U.todayISO(U.getWeekRange(new Date("2021-01-01T12:00:00")).start) === "2020-12-28");
+
   eq("getMaxCarga (series/carga)", U.getMaxCarga({ series: [{ carga: 60 }, { carga: 82.5 }, { carga: 40 }] }), 82.5);
   eq("getMaxCarga (sets/weight)", U.getMaxCarga({ sets: [{ weight: 10 }, { weight: 12.5 }] }), 12.5);
   eq("getMaxCarga vazio -> 0", U.getMaxCarga({ series: [] }), 0);
@@ -544,6 +561,32 @@ function testPersistence2C() {
   P.hydrate(t3);
   eq("só exercícios com nome sobrevivem", t3.history[0].exercises.length, 1);
   eq("exercício válido mantém séries", t3.history[0].exercises[0].sets[0], { weight: 5, reps: 8 });
+
+  P.saveHistory([{
+    name: "Séries inválidas", exercises: [{ name: "Ok", sets: [
+      { weight: 10, reps: 0 }, { weight: 20, reps: -2 }, { weight: 30, reps: "x" }, { weight: 40, reps: 8 },
+    ] }],
+  }]);
+  const tReps = { routines: [], history: [], lang: "pt", autoRestEnabled: true };
+  P.hydrate(tReps);
+  eq("histórico descarta séries restauradas com reps menores que 1", tReps.history[0].exercises[0].sets, [{ weight: 40, reps: 8 }]);
+
+  // Sprint 5.1: marcação de MODALIDADE sobrevive ao round-trip (leitura do
+  // resumo semanal precisa reconhecer o cardio mesmo após recarregar).
+  P.saveHistory([{
+    name: "Cardio", status: "completed", dateISO: "2026-10-18", durationMin: 30,
+    category: "cardio", type: "cardio",
+  }]);
+  const tCardio = { routines: [], history: [], lang: "pt", autoRestEnabled: true };
+  P.hydrate(tCardio);
+  ok("histórico preserva category/type (marcação de cardio) de forma aditiva",
+    tCardio.history[0].category === "cardio" && tCardio.history[0].type === "cardio" &&
+    tCardio.history[0].durationMin === 30 && tCardio.history[0].dateISO === "2026-10-18");
+  P.saveHistory([{ name: "Força", status: "completed", dateISO: "2026-10-18" }]);
+  const tStrength = { routines: [], history: [], lang: "pt", autoRestEnabled: true };
+  P.hydrate(tStrength);
+  ok("entrada de força não ganha marcação de cardio",
+    tStrength.history[0].category === undefined && tStrength.history[0].type === undefined);
 
   // Array de exercícios vazio não é persistido
   P.saveHistory([{ name: "Sem exercícios", exercises: [] }]);
@@ -939,7 +982,7 @@ function testWorkoutSession() {
       null,
       "x",
       { catalogId: "C-02", sets: 2, reps: 12, weight: 60, rest: 60, completedSets: [
-        { weight: 60, reps: 12 }, { weight: "x", reps: 5 }, { weight: 70, reps: 8 }, { weight: 80, reps: 6 },
+        { weight: 60, reps: 12 }, { weight: "x", reps: 5 }, { weight: 0, reps: 0 }, { weight: 70, reps: 8 }, { weight: 80, reps: 6 },
       ] },
       { name: "Exercício custom", sets: "3", reps: "10" },
       { foo: "bar" },
@@ -948,7 +991,7 @@ function testWorkoutSession() {
   ok("sanitize deriva status do isFinished legado",
     bad.status === "finished" && bad.isFinished === true && isDate(bad.finishedAt));
   eq("sanitize descarta exercícios inválidos", bad.exercises.length, 2);
-  eq("sanitize descarta séries inválidas e clampa ao planejado", bad.exercises[0].completedSets.length, 2);
+  eq("sanitize descarta séries inválidas (inclusive reps 0) e clampa ao planejado", bad.exercises[0].completedSets.length, 2);
   ok("sanitize sincroniza setsCompleted com completedSets",
     bad.exercises[0].setsCompleted === bad.exercises[0].completedSets.length);
   ok("sanitize reconhece exercício só com nome", bad.exercises[1].name === "Exercício custom" &&
@@ -1113,6 +1156,11 @@ function testWorkoutController() {
   const bad = C.start(null, resolve, T0);
   ok("start sem rotina -> recusa com mensagem",
     bad.ok === false && bad.reason === "invalid-routine" && bad.message.length > 0 && bad.session === null);
+  const storageBeforeEmptyStart = sb.localStorage.getItem("tt_ds_v1_session");
+  const empty = C.start({ id: "rV", letter: "V", name: "Vazia", exercises: [] }, resolve, T0);
+  ok("start de rotina vazia é bloqueado com feedback e não persiste sessão",
+    empty.ok === false && empty.reason === "empty-routine" && /Adicione pelo menos um exercício/i.test(empty.message) &&
+      empty.session === null && sb.localStorage.getItem("tt_ds_v1_session") === storageBeforeEmptyStart);
 
   const s = started.session;
 
@@ -2293,6 +2341,685 @@ function testRestOverlayDialogE71() {
 }
 
 // ---------------------------------------------------------------------------
+// Home semanal: leituras puras do histórico (Sprint 5.1)
+// ---------------------------------------------------------------------------
+function testHomeInsights() {
+  suite("HomeInsights: resumo semanal (Sprint 5.1)");
+
+  const src = fs.readFileSync(path.join(ROOT, "js/home-insights.js"), "utf8");
+  const sb = makeSandbox();
+  loadModules(sb, ["js/home-insights.js"]);
+  const H = sb.HomeInsights;
+
+  // Datas fixas (sem relógio): 18/10/2026 é domingo, 12/10/2026 é segunda.
+  const MON = new Date(2026, 9, 12, 9, 0, 0);
+  const TUE = new Date(2026, 9, 13, 9, 0, 0);
+  const WED = new Date(2026, 9, 14, 18, 30, 0);
+  const THU = new Date(2026, 9, 15, 10, 0, 0);
+  const SUN = new Date(2026, 9, 18, 12, 0, 0);
+  const NEXT_MON = new Date(2026, 9, 19, 9, 0, 0);
+  const WEEK = ["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17", "2026-10-18"];
+
+  const entry = (extra) => Object.assign({ name: "Treino", status: "completed" }, extra);
+
+  // --- forma do módulo -----------------------------------------------------
+  ok("expõe build + meta padrão de cardio (150)",
+    typeof H.build === "function" && H.DEFAULT_CARDIO_GOAL === 150);
+  ok("módulo puro: sem DOM, armazenamento, persistência, rede ou aleatoriedade",
+    !/document|localStorage|sessionStorage|Persistence|StorageService|window\.|Math\.random|fetch\(/.test(src));
+  ok("módulo opera sem document/localStorage no sandbox", typeof sb.HomeInsights.build === "function");
+
+  // --- semana segunda → domingo -------------------------------------------
+  const wed = H.build([], WED);
+  eq("sete dias, de segunda a domingo", wed.days.map((d) => d.dateISO), WEEK);
+  eq("índices dos dias 0..6", wed.days.map((d) => d.weekdayIndex), [0, 1, 2, 3, 4, 5, 6]);
+  eq("dia do mês de cada célula", wed.days.map((d) => d.dayOfMonth), [12, 13, 14, 15, 16, 17, 18]);
+  ok("limites da semana expostos", wed.weekStartISO === "2026-10-12" && wed.weekEndISO === "2026-10-18");
+  ok("marca apenas o dia de referência como 'hoje'",
+    wed.days.filter((d) => d.isToday).length === 1 && wed.days[2].isToday === true);
+
+  // --- determinismo e virada de semana ------------------------------------
+  eq("determinístico por entrada (mesma referência -> mesmo resultado)",
+    JSON.stringify(H.build([], WED)), JSON.stringify(H.build([], WED)));
+  ok("domingo pertence à mesma semana da segunda",
+    H.build([], SUN).weekStartISO === "2026-10-12" &&
+    H.build([], MON).weekStartISO === "2026-10-12");
+  ok("virada de semana: segunda seguinte abre uma semana nova",
+    H.build([], NEXT_MON).weekStartISO === "2026-10-19" &&
+    H.build([], NEXT_MON).weekEndISO === "2026-10-25" && H.build([], NEXT_MON).days[0].dateISO === "2026-10-19");
+  ok("startOfWeek devolve segunda à meia-noite",
+    H.startOfWeek(WED).getDay() === 1 && H.startOfWeek(WED).getHours() === 0 &&
+    H.startOfWeek(WED).getDate() === 12);
+
+  // --- agrupamento de vários treinos no mesmo dia -------------------------
+  const multi = H.build([
+    entry({ id: 10, dateISO: "2026-10-14", name: "Treino A" }),
+    entry({ id: 30, dateISO: "2026-10-14", name: "Treino C" }),
+    entry({ id: 20, dateISO: "2026-10-14", name: "Treino B" }),
+  ], WED);
+  ok("três treinos no mesmo dia: conta 3, mostra o ÚLTIMO e sinaliza os excedentes",
+    multi.days[2].count === 3 && multi.days[2].extra === 2 && multi.days[2].entry.id === 30 &&
+    multi.days[2].entry.name === "Treino C");
+  const byTime = H.build([
+    entry({ id: 1, dateISO: "2026-10-13", name: "Mais cedo", finishedAt: "2026-10-13T09:00:00" }),
+    entry({ id: 2, dateISO: "2026-10-13", name: "Mais tarde", finishedAt: "2026-10-13T20:00:00" }),
+  ], WED);
+  ok("último do dia pelo instante (finishedAt) e não pela ordem do array",
+    byTime.days[1].entry.name === "Mais tarde" && byTime.days[1].extra === 1);
+
+  // --- dias vazios ---------------------------------------------------------
+  ok("dias sem treino ficam vazios (entry nula, count 0, extra 0)",
+    wed.days[0].count === 0 && wed.days[0].entry === null && wed.days[0].extra === 0);
+
+  // --- histórico legado (sem dateISO) -------------------------------------
+  const legacy = [
+    { id: 1, name: "Treino legado", date: "Ontem, 18:30", duration: "50 min", status: "completed" },
+    { id: 2, name: "Texto enganoso", date: "Segunda, 07:00", status: "completed" },
+  ];
+  const legacyOut = H.build(legacy, WED);
+  ok("histórico sem dateISO não entra em nenhum dia e não lança",
+    legacyOut.days.every((d) => d.count === 0) && legacyOut.consecutiveDays === 0 &&
+    legacyOut.cardioMinutes === 0);
+  ok("dateISO inválido ('2026-13-45', 'ontem') é ignorado",
+    H.build([
+      entry({ dateISO: "2026-13-45" }), entry({ dateISO: "ontem" }), entry({ dateISO: 20261014 }),
+    ], WED).days.every((d) => d.count === 0));
+  ok("entradas não-objeto são toleradas",
+    H.build([null, 7, "x", entry({ dateISO: "2026-10-14", id: 9 })], WED).days[2].count === 1 &&
+    H.build(null, WED).days.length === 7);
+
+  // --- cardio --------------------------------------------------------------
+  const cardio = H.build([
+    entry({ dateISO: "2026-10-13", category: "cardio", durationMin: 30 }),
+    entry({ dateISO: "2026-10-14", type: "cardio", durationMin: "20" }),
+    entry({ dateISO: "2026-10-14", durationMin: 45 }),                    // força: fora do total
+    entry({ dateISO: "2026-10-05", category: "cardio", durationMin: 99 }), // fora da semana
+  ], WED);
+  eq("cardio soma apenas category/type 'cardio' da semana (min)", cardio.cardioMinutes, 50);
+  eq("meta padrão de cardio", cardio.cardioGoal, 150);
+  ok("meta inválida cai no padrão de 150",
+    H.build([], WED, 0).cardioGoal === 150 && H.build([], WED, -5).cardioGoal === 150 &&
+    H.build([], WED, "x").cardioGoal === 150 && H.build([], WED, null).cardioGoal === 150);
+  ok("meta customizada é respeitada", H.build([], WED, 300).cardioGoal === 300);
+  ok("sem cardio registrado o total é zero",
+    H.build([entry({ dateISO: "2026-10-13" })], WED).cardioMinutes === 0);
+  ok("cardio exige a marcação: type/category diferentes não contam",
+    H.build([
+      entry({ dateISO: "2026-10-13", category: "strength", type: "forca", durationMin: 60 }),
+    ], WED).cardioMinutes === 0);
+
+  // --- dias consecutivos ---------------------------------------------------
+  const streak = (hist, ref) => H.build(hist, ref).consecutiveDays;
+  eq("sequência de três dias até a referência", streak([
+    entry({ dateISO: "2026-10-12" }), entry({ dateISO: "2026-10-13" }), entry({ dateISO: "2026-10-14" }),
+  ], WED), 3);
+  eq("parcial NÃO conta no lugar do dia concluído", streak([
+    entry({ dateISO: "2026-10-12" }), entry({ dateISO: "2026-10-13" }),
+    entry({ dateISO: "2026-10-14", status: "partial" }),
+  ], WED), 2);
+  eq("só parcial -> sequência zero", streak([entry({ dateISO: "2026-10-14", status: "partial" })], WED), 0);
+  eq("tolerância de um dia: ainda não treinou hoje, a sequência de ontem vale", streak([
+    entry({ dateISO: "2026-10-12" }), entry({ dateISO: "2026-10-13" }), entry({ dateISO: "2026-10-14" }),
+  ], THU), 3);
+  eq("buraco na sequência zera o contador", streak([entry({ dateISO: "2026-10-12" })], WED), 0);
+  eq("vários treinos no mesmo dia contam um único dia", streak([
+    entry({ dateISO: "2026-10-14" }), entry({ dateISO: "2026-10-14" }),
+  ], WED), 1);
+  eq("sequência atravessa a virada de semana (sáb, dom, seg)", streak([
+    entry({ dateISO: "2026-10-17" }), entry({ dateISO: "2026-10-18" }), entry({ dateISO: "2026-10-19" }),
+  ], NEXT_MON), 3);
+  eq("legado sem dateISO não gera sequência", streak(legacy, THU), 0);
+
+  // --- leitura pura (não muta a entrada) ----------------------------------
+  const original = [
+    entry({ id: 1, dateISO: "2026-10-14", name: "Treino A" }),
+    entry({ id: 2, dateISO: "2026-10-13", category: "cardio", durationMin: 15 }),
+  ];
+  const snapshot = JSON.stringify(original);
+  H.build(original, WED, 200);
+  eq("build não muta o histórico recebido", JSON.stringify(original), snapshot);
+  ok("build expõe as chaves do resumo",
+    ["weekStartISO", "weekEndISO", "days", "cardioMinutes", "cardioGoal", "consecutiveDays"]
+      .every((k) => k in H.build([], WED)));
+
+  // --- cards "Treino de hoje" / "Último treino" (Sprint 5.1.1) -------------
+  ok("expõe todayWorkout + lastWorkout",
+    typeof H.todayWorkout === "function" && typeof H.lastWorkout === "function");
+  ok("histórico vazio: os dois cards ficam sem dado (nada é inventado)",
+    H.todayWorkout([], WED) === null && H.lastWorkout([], WED) === null &&
+    H.todayWorkout(null, WED) === null && H.lastWorkout(null, WED) === null);
+  ok("legado sem dateISO não alimenta os cards",
+    H.todayWorkout(legacy, WED) === null && H.lastWorkout(legacy, WED) === null);
+
+  const cards = [
+    entry({ id: 1, dateISO: "2026-10-14", name: "Treino A — Peito", durationMin: 30,
+      exercises: [{ name: "Supino" }, { name: "Crucifixo" }] }),
+    entry({ id: 2, dateISO: "2026-10-14", name: "Treino C — Pernas", durationMin: 42,
+      exercises: [{ name: "Agachamento" }], finishedAt: "2026-10-14T20:00:00" }),
+    entry({ id: 3, dateISO: "2026-10-13", name: "Treino B — Costas", durationMin: 50 }),
+  ];
+  const cardToday = H.todayWorkout(cards, WED);
+  eq("card de hoje: resumo do ÚLTIMO registro do dia (um único registro, sem mistura)",
+    [cardToday.name, cardToday.exercises, cardToday.durationMin, cardToday.status],
+    ["Treino C — Pernas", 1, 42, "completed"]);
+  ok("card de hoje: aponta para o próprio registro do dia",
+    cardToday.entry === cards[1]);
+  ok("card de hoje: sem registro no dia da referência -> null (estado vazio)",
+    H.todayWorkout(cards, THU) === null && H.todayWorkout(cards, MON) === null);
+
+  const cardLastWed = H.lastWorkout(cards, WED);
+  eq("último treino: registro datado mais recente + daysAgo",
+    [cardLastWed.name, cardLastWed.dateISO, cardLastWed.daysAgo, cardLastWed.durationMin],
+    ["Treino C — Pernas", "2026-10-14", 0, 42]);
+  eq("último treino: daysAgo em dias locais (ontem = 1)",
+    [H.lastWorkout(cards, THU).name, H.lastWorkout(cards, THU).daysAgo],
+    ["Treino C — Pernas", 1]);
+  eq("último treino: distância maior (5 dias depois)", H.lastWorkout(cards, NEXT_MON).daysAgo, 5);
+  ok("último treino: empate de data resolve pelo instante conhecido",
+    H.lastWorkout([
+      entry({ id: 1, dateISO: "2026-10-14", name: "Mais cedo", finishedAt: "2026-10-14T08:00:00" }),
+      entry({ id: 2, dateISO: "2026-10-14", name: "Mais tarde", finishedAt: "2026-10-14T21:00:00" }),
+    ], WED).name === "Mais tarde");
+  ok("último treino: registro parcial é o último treino e preserva o status",
+    H.lastWorkout([entry({ dateISO: "2026-10-14", name: "Parcial", status: "partial" })], WED).status === "partial");
+  ok("cards: duração/séries inválidas viram neutro (sem contaminação)",
+    [H.todayWorkout([entry({ dateISO: "2026-10-14", durationMin: "x" })], WED).durationMin,
+     H.todayWorkout([entry({ dateISO: "2026-10-14", durationMin: -5 })], WED).durationMin,
+     H.todayWorkout([entry({ dateISO: "2026-10-14" })], WED).exercises],
+    [0, 0, 0]);
+  ok("cards: registro sem nome não ganha nome inventado",
+    H.todayWorkout([{ dateISO: "2026-10-14", status: "completed" }], WED).name === "");
+  ok("cards: data no futuro não gera daysAgo negativo",
+    H.lastWorkout([entry({ dateISO: "2026-10-20" })], WED).daysAgo === 0);
+  ok("cards: dateISO inválido é ignorado nos dois cards",
+    H.todayWorkout([entry({ dateISO: "ontem" })], WED) === null &&
+    H.lastWorkout([entry({ dateISO: "2026-13-45" })], WED) === null);
+
+  const cardsSnapshot = JSON.stringify(cards);
+  H.todayWorkout(cards, WED);
+  H.lastWorkout(cards, WED);
+  eq("cards não mutam o histórico recebido", JSON.stringify(cards), cardsSnapshot);
+
+  // --- "Últimos treinos": faixa de concluídos (Sprint 5.1.2) ----------------
+  ok("expõe recentCompletedWorkouts + limite de 7",
+    typeof H.recentCompletedWorkouts === "function" && H.RECENT_LIMIT === 7);
+  eq("histórico vazio/válido-ausente: faixa vazia (nada é inventado)",
+    [H.recentCompletedWorkouts([], WED).length, H.recentCompletedWorkouts(null, WED).length,
+     H.recentCompletedWorkouts(undefined, WED).length, H.recentCompletedWorkouts("x", WED).length],
+    [0, 0, 0, 0]);
+  eq("legado sem dateISO fica FORA da faixa (mas segue no histórico)",
+    H.recentCompletedWorkouts(legacy, WED).length, 0);
+  eq("parcial e status desconhecido/ausente não entram na faixa",
+    H.recentCompletedWorkouts([
+      entry({ dateISO: "2026-10-14", name: "Parcial", status: "partial" }),
+      entry({ dateISO: "2026-10-14", name: "Cancelado", status: "cancelled" }),
+      { dateISO: "2026-10-14", name: "Sem status" },
+      entry({ dateISO: "2026-10-14", name: "Válido" }),
+    ], WED).map((w) => w.name), ["Válido"]);
+  eq("dateISO inválido e entradas não-objeto são tolerados",
+    H.recentCompletedWorkouts([
+      entry({ dateISO: "ontem", name: "Texto" }), entry({ dateISO: "2026-13-45", name: "Data" }),
+      null, 7, "x", entry({ dateISO: "2026-10-14", name: "Ok" }),
+    ], WED).map((w) => w.name), ["Ok"]);
+
+  const many = [
+    entry({ dateISO: "2026-10-18", name: "D0" }), entry({ dateISO: "2026-10-17", name: "D1" }),
+    entry({ dateISO: "2026-10-16", name: "D2" }), entry({ dateISO: "2026-10-15", name: "D3" }),
+    entry({ dateISO: "2026-10-14", name: "D4" }), entry({ dateISO: "2026-10-13", name: "D5" }),
+    entry({ dateISO: "2026-10-12", name: "D6" }), entry({ dateISO: "2026-10-11", name: "D7" }),
+  ];
+  eq("ordena do mais recente para o mais antigo e corta em 7 (sem inventar 8º)",
+    H.recentCompletedWorkouts(many, undefined, SUN).map((w) => w.name),
+    ["D0", "D1", "D2", "D3", "D4", "D5", "D6"]);
+  eq("com menos de 7 concluídos devolve menos itens",
+    H.recentCompletedWorkouts(many.slice(0, 3), undefined, SUN).length, 3);
+  eq("limite explícito é respeitado (3)",
+    H.recentCompletedWorkouts(many, 3, SUN).map((w) => w.name), ["D0", "D1", "D2"]);
+  eq("limite inválido cai no padrão de 7",
+    [H.recentCompletedWorkouts(many, 0, SUN).length, H.recentCompletedWorkouts(many, -2, SUN).length,
+     H.recentCompletedWorkouts(many, "x", SUN).length, H.recentCompletedWorkouts(many, null, SUN).length],
+    [7, 7, 7, 7]);
+  eq("referência sem registro: daysAgo por item (ontem = 1, data absoluta depois)",
+    H.recentCompletedWorkouts(many.slice(0, 3), undefined, NEXT_MON).map((w) => w.daysAgo), [1, 2, 3]);
+
+  const recentCards = H.recentCompletedWorkouts([
+    entry({ id: 1, dateISO: "2026-10-14", name: "Pernas", durationMin: 42,
+      exercises: [{ name: "Agachamento" }] }),
+    entry({ id: 2, dateISO: "2026-10-14", name: "Peito", durationMin: "x" }),
+  ], undefined, WED);
+  eq("cada card resume UM registro (nome, duração válida, exercícios) sem misturar",
+    [recentCards[1].name, recentCards[1].durationMin, recentCards[1].exercises,
+     recentCards[1].dateISO, recentCards[1].daysAgo],
+    ["Pernas", 42, 1, "2026-10-14", 0]);
+  ok("duração ausente/inválida vira neutro (0) e nunca é inventada",
+    recentCards[0].durationMin === 0 && recentCards[0].exercises === 0);
+  eq("o empate de data resolve pelo instante conhecido (finishedAt mais recente primeiro)",
+    H.recentCompletedWorkouts([
+      entry({ id: 1, dateISO: "2026-10-14", name: "Mais cedo", finishedAt: "2026-10-14T08:00:00" }),
+      entry({ id: 2, dateISO: "2026-10-14", name: "Mais tarde", finishedAt: "2026-10-14T21:00:00" }),
+    ], undefined, WED).map((w) => w.name), ["Mais tarde", "Mais cedo"]);
+  eq("empate sem instante conhecido cai na ordem do histórico (determinístico)",
+    H.recentCompletedWorkouts([
+      entry({ dateISO: "2026-10-14", name: "Primeiro" }),
+      entry({ dateISO: "2026-10-14", name: "Segundo" }),
+      entry({ dateISO: "2026-10-14", name: "Terceiro" }),
+    ], undefined, WED).map((w) => w.name), ["Primeiro", "Segundo", "Terceiro"]);
+  eq("instante conhecido tem prioridade sobre a ordem do histórico",
+    H.recentCompletedWorkouts([
+      entry({ dateISO: "2026-10-14", name: "Sem instante" }),
+      entry({ dateISO: "2026-10-14", name: "Com instante", id: 5000 }),
+    ], undefined, WED).map((w) => w.name), ["Com instante", "Sem instante"]);
+  ok("sem histórico de sequência: data no futuro não gera daysAgo negativo",
+    H.recentCompletedWorkouts([entry({ dateISO: "2026-10-20" })], undefined, WED)[0].daysAgo === 0);
+
+  const recentSnapshot = JSON.stringify(many);
+  H.recentCompletedWorkouts(many, undefined, SUN);
+  eq("a faixa não muta o histórico recebido", JSON.stringify(many), recentSnapshot);
+  ok("a faixa não reordena o array original (cópia interna)",
+    many[0].name === "D0" && many[7].name === "D7");
+
+  // --- M1 (Sprint 5.1.3): regras temporais nas bordas ----------------------
+  // Todas as datas abaixo são verificadas contra o calendário: 2026-12-28 é
+  // segunda e 2027-01-03 é domingo; 2026-03-30 é segunda e 2026-04-05 domingo.
+  const NEW_YEAR_MON = new Date(2026, 11, 28, 8, 0, 0);  // segunda, 28/12/2026
+  const NEW_YEAR_SUN = new Date(2027, 0, 3, 12, 0, 0);   // domingo, 03/01/2027
+  const newYear = H.build([], NEW_YEAR_MON);
+  eq("virada de ANO: sete dias de 28/12/2026 a 03/01/2027 (segunda a domingo)",
+    newYear.days.map((d) => d.dateISO),
+    ["2026-12-28", "2026-12-29", "2026-12-30", "2026-12-31",
+     "2027-01-01", "2027-01-02", "2027-01-03"]);
+  ok("virada de ano: limites expostos e o ano do calendário acompanha o dia",
+    newYear.weekStartISO === "2026-12-28" && newYear.weekEndISO === "2027-01-03" &&
+    newYear.days[4].dateISO === "2027-01-01" && newYear.days[4].dayOfMonth === 1 &&
+    newYear.days[4].weekdayIndex === 4 &&
+    H.build([], NEW_YEAR_SUN).weekStartISO === "2026-12-28" &&
+    H.build([], NEW_YEAR_SUN).days[6].isToday === true);
+  eq("virada de ano: dias consecutivos atravessam 31/12 -> 01/01",
+    streak([
+      entry({ dateISO: "2026-12-31" }), entry({ dateISO: "2027-01-01" }),
+      entry({ dateISO: "2027-01-02" }),
+    ], new Date(2027, 0, 2, 9, 0, 0)), 3);
+
+  const MAR_MON = new Date(2026, 2, 30, 9, 0, 0);        // segunda, 30/03/2026
+  const month = H.build([], MAR_MON);
+  eq("virada de MÊS: sete dias de 30/03/2026 a 05/04/2026",
+    month.days.map((d) => d.dateISO),
+    ["2026-03-30", "2026-03-31", "2026-04-01", "2026-04-02",
+     "2026-04-03", "2026-04-04", "2026-04-05"]);
+  ok("virada de mês: dia 01/04 é quarta (índice 2) e o domingo fecha a semana",
+    month.days[2].dateISO === "2026-04-01" && month.days[2].weekdayIndex === 2 &&
+    month.days[6].weekdayIndex === 6 && month.weekEndISO === "2026-04-05");
+
+  // meia-noite: o dia é LOCAL e a virada acontece exatamente na meia-noite
+  const MIDNIGHT = new Date(2026, 9, 14, 23, 59, 59);
+  ok("meia-noite: 23:59:59 ainda é o MESMO dia local (card de hoje e faixa)",
+    H.build([entry({ dateISO: "2026-10-14", name: "Hoje" })], MIDNIGHT).days[2].isToday === true &&
+    H.todayWorkout([entry({ dateISO: "2026-10-14", name: "Hoje" })], MIDNIGHT).name === "Hoje" &&
+    H.recentCompletedWorkouts([entry({ dateISO: "2026-10-14" })], undefined, MIDNIGHT)[0].daysAgo === 0);
+  ok("meia-noite: um segundo depois já é outro dia (ontem não é 'hoje')",
+    H.build([entry({ dateISO: "2026-10-14" })], new Date(2026, 9, 15, 0, 0, 1)).days[3].isToday === true &&
+    H.build([entry({ dateISO: "2026-10-14" })], new Date(2026, 9, 15, 0, 0, 1)).days[2].isToday === false &&
+    H.todayWorkout([entry({ dateISO: "2026-10-14" })], new Date(2026, 9, 15, 0, 0, 1)) === null);
+
+  // dateISO é a única fonte do DIA; startedAt/finishedAt só desempatam instantes
+  ok("o DIA vem sempre de dateISO (startedAt/finishedAt não movem o treino de dia)",
+    H.build([
+      entry({ dateISO: "2026-10-14", startedAt: "2026-10-13T23:40:00",
+        finishedAt: "2026-10-14T00:20:00" }),
+    ], WED).days.map((d) => d.count).join() === "0,0,1,0,0,0,0" &&
+    H.build([
+      entry({ dateISO: "2026-10-13", startedAt: "2026-10-12T23:40:00",
+        finishedAt: "2026-10-13T00:20:00" }),
+    ], WED).days[1].count === 1 &&
+    H.build([
+      entry({ dateISO: "2026-10-13", name: "Ontem" }),
+    ], WED).consecutiveDays === 1);
+
+  // coerência entre as três leituras do MESMO histórico
+  const consistente = [
+    entry({ dateISO: "2026-10-11", name: "Fora da semana" }),   // domingo anterior
+    entry({ dateISO: "2026-10-12", name: "Seg" }),
+    entry({ dateISO: "2026-10-14", name: "Qua A", status: "partial" }),
+    entry({ dateISO: "2026-10-14", name: "Qua B" }),
+  ];
+  ok("mesmo histórico: semana, dias consecutivos e faixa leem os mesmos registros",
+    H.build(consistente, WED).days.filter((d) => d.count > 0).length === 2 &&
+    H.build(consistente, WED).days[2].count === 2 && H.build(consistente, WED).days[2].extra === 1 &&
+    H.build(consistente, WED).days[2].entry.name === "Qua B" &&
+    H.build(consistente, WED).consecutiveDays === 1 &&
+    H.recentCompletedWorkouts(consistente, undefined, WED).map((w) => w.name).join() ===
+      "Qua B,Seg,Fora da semana");
+
+  // --- B1 (Sprint 5.1.3): semântica do "+N" da faixa semanal --------------
+  ok("B1: '+' é o número de EXCEDENTES além do treino exibido (total - 1)",
+    multi.days[2].count === 3 && multi.days[2].extra === 2 &&
+    multi.days[2].extra === multi.days[2].count - 1);
+  ok("B1: dia com um único treino não tem excedente (nenhum '+N' é desenhado)",
+    H.build([entry({ dateISO: "2026-10-12" })], WED).days[0].count === 1 &&
+    H.build([entry({ dateISO: "2026-10-12" })], WED).days[0].extra === 0);
+  ok("B1: dia vazio tem count e extra zerados (nenhum dia é inventado)",
+    H.build([], WED).days.every((d) => d.count === 0 && d.extra === 0));
+}
+
+// ---------------------------------------------------------------------------
+// Home semanal: integração na Home (Sprint 5.1)
+// ---------------------------------------------------------------------------
+function testHomeWeeklyWiring() {
+  suite("Home semanal: integração (Sprint 5.1)");
+
+  const html = fs.readFileSync(path.join(ROOT, "TreinoTracker_DeepSeek.html"), "utf8");
+  const inlineStart = html.indexOf("<script>\n    // ================= CATÁLOGO REAL");
+
+  // --- módulo carregado antes do script principal --------------------------
+  ok("carrega js/home-insights.js antes do script principal",
+    html.includes('<script src="js/home-insights.js"></script>') &&
+    html.indexOf('<script src="js/home-insights.js"></script>') < inlineStart);
+
+  // --- elementos da Home (o markup não traz dado semanal mockado) ----------
+  ok("faixa semanal é uma lista vazia no markup (preenchida pelo render)",
+    /<div id="home-weekly-strip" class="weekly-strip" role="list" data-i18n-label="weekly_strip_label"><\/div>/.test(html));
+  ok("cards de cardio e dias consecutivos presentes com valores neutros",
+    html.includes('id="home-cardio-value"') && html.includes('id="home-streak-value"') &&
+    />0 \/ 150 min</.test(html));
+  // Sprint 5.1.4: a legenda redundante "atingido / meta" saiu do card de cardio —
+  // título e valor continuam no markup (a chave segue no dicionário, ver KEYS51).
+  ok("Sprint 5.1.4: legenda do cardio removida do markup (título e valor preservados)",
+    !/class="home-metric-note"/.test(html) && !/data-i18n="cardio_goal"/.test(html) &&
+    /id="home-cardio-value"[^>]*>0 \/ 150 min</.test(html) &&
+    /data-i18n="cardio_week"/.test(html));
+
+  // --- render derivado do módulo puro --------------------------------------
+  const body = (html.match(/function renderHome\(\)[\s\S]*?\n    \}/) || [""])[0];
+  ok("renderHome deriva do módulo puro com data explícita (uma única referência)",
+    body.includes("const now = new Date();") && body.includes("HomeInsights.build(state.history, now)"));
+  ok("renderHome escapa texto vindo do histórico",
+    body.includes("TTUtils.escapeHtml("));
+  ok("renderHome usa as chaves de i18n da 5.1 (dias, contadores, vazio)",
+    body.includes("HOME_WEEKDAY_KEYS") && body.includes("t.workouts_count") &&
+    body.includes("t.no_workout") && body.includes("t.days") && body.includes("data-i18n-label"));
+  ok("renderHome preenche os três alvos (faixa, cardio, streak)",
+    body.includes("home-weekly-strip") && body.includes("home-cardio-value") &&
+    body.includes("home-streak-value") && body.includes("insights.cardioMinutes") &&
+    body.includes("insights.consecutiveDays"));
+
+  // --- pontos de atualização ------------------------------------------------
+  const navigateBody = (html.match(/function navigate\(screenId, param = null\)[\s\S]*?\n    \}/) || [""])[0];
+  ok("navegar para a Home atualiza o resumo",
+    /if \(screenId === 'home'\) renderHome\(\);/.test(navigateBody));
+  const saveBody = (html.match(/function saveSessionToHistory\(status\)[\s\S]*?\n    \}/) || [""])[0];
+  ok("salvar treino no histórico atualiza o resumo antes de qualquer navegação",
+    /Persistence\.saveHistory\(state\.history\);[\s\S]{0,400}?renderHome\(\);/.test(saveBody));
+  ok("troca de idioma redesenha o resumo",
+    /I18n\.onChange\(\(\) => renderHome\(\)\);/.test(html));
+
+  // --- nada de conteúdo semanal mockado -----------------------------------
+  ok("nenhum dia/valor semanal hardcoded no markup da Home",
+    !/weekly-day(-name|-date|-workout|-more)?["' >]/.test(html.slice(html.indexOf('id="screen-home"'), html.indexOf('id="screen-workouts"'))) &&
+    !/\b\+2\b/.test(html.slice(html.indexOf('id="home-weekly-strip"'), html.indexOf('id="screen-workouts"'))));
+
+  // --- i18n: chaves da 5.1 presentes e consistentes nos 3 idiomas ---------
+  const isb = makeSandbox();
+  loadModules(isb, ["js/i18n.js"]);
+  const dict = isb.I18n.dict;
+  const KEYS51 = ["weekly_summary", "weekly_strip_label", "no_workout", "workouts_count",
+    "cardio_week", "cardio_goal", "consecutive_days", "days",
+    "weekday_mon", "weekday_tue", "weekday_wed", "weekday_thu", "weekday_fri", "weekday_sat", "weekday_sun"];
+  ok("15 chaves da 5.1 em pt/en/es",
+    KEYS51.length === 15 &&
+    ["pt", "en", "es"].every((l) => KEYS51.every((k) => typeof dict[l][k] === "string" && dict[l][k].trim() !== "")));
+  ok("os 7 nomes de dia existem e são curtos (célula da faixa)",
+    ["pt", "en", "es"].every((l) =>
+      ["weekday_mon", "weekday_tue", "weekday_wed", "weekday_thu", "weekday_fri", "weekday_sat", "weekday_sun"]
+        .every((k) => dict[l][k].length > 0 && dict[l][k].length <= 5)));
+}
+
+// ---------------------------------------------------------------------------
+// Home: "Treino de hoje" + faixa "Últimos treinos" sem dado mockado (E5.1.1/5.1.2)
+// ---------------------------------------------------------------------------
+function testHomeCardsWiring() {
+  suite("Home: card de hoje e faixa de últimos treinos (Sprint 5.1.1/5.1.2)");
+
+  const html = fs.readFileSync(path.join(ROOT, "TreinoTracker_DeepSeek.html"), "utf8");
+  const home = html.slice(html.indexOf('id="screen-home"'), html.indexOf('id="screen-workouts"'));
+
+  // --- card de destaque "Treino de hoje" (5.1.1, preservado) ---------------
+  ok("card de destaque tem alvos para nome, exercícios e duração",
+    /id="home-today-name"/.test(home) && /id="home-today-exercises"/.test(home) &&
+    /id="home-today-duration"/.test(home));
+  ok("os alvos do dia começam neutros (—)",
+    /id="home-today-name">—<\/h3>/.test(home) &&
+    /id="home-today-exercises"[^>]*>—<\/p>/.test(home) &&
+    /id="home-today-duration"[^>]*>—<\/p>/.test(home));
+  ok("o rótulo do card de hoje é i18n (hoje o título é dado real, não tradução)",
+    /data-i18n="today_workout"/.test(home));
+
+  // --- seção "Últimos treinos" (5.1.2) -------------------------------------
+  ok("seção 'Últimos treinos' substituiu o card único de último treino",
+    /id="home-recent-title"[^>]*data-i18n="recent_workouts"/.test(home) &&
+    !/id="home-last-name"/.test(home) && !/id="home-last-meta"/.test(home) &&
+    !/id="home-last-status"/.test(home));
+  ok("a faixa é uma lista vazia no markup, com rótulo acessível e foco de teclado",
+    /<div id="home-recent-strip" class="recent-strip" role="list" tabindex="0" data-i18n-label="recent_strip_label"><\/div>/.test(home));
+  ok("estado vazio localizado no markup (nenhum card fictício de reserva)",
+    /id="home-recent-empty"[^>]*data-i18n="no_recent_workouts"[^>]*>/.test(home));
+  ok("botão 'Ver histórico completo' reutiliza navigate('history')",
+    /<button[^>]*onclick="navigate\('history'\)"[^>]*data-i18n="see_full_history"/.test(home));
+  ok("nenhum dado fictício remanescente na seção de treinos recentes",
+    !/Treino A — Peito e Tríceps|Treino B — Costas e Bíceps|Ontem • 50 min|>45 min<|>6</.test(home));
+  ok("nenhuma tela/lista de histórico duplicada (a tela existente é reusada)",
+    !/id="screen-recent"|id="home-history-list"|id="recent-history-container"/.test(html) &&
+    /id="screen-history"/.test(html));
+
+  // --- render (5.1.2) ------------------------------------------------------
+  const body = (html.match(/function renderHome\(\)[\s\S]*?\n    \}/) || [""])[0];
+  const helper = (html.match(/function homeDayLabel\([\s\S]*?\n    \}/) || [""])[0];
+  ok("renderHome deriva o card de hoje do histórico real",
+    body.includes("HomeInsights.todayWorkout(state.history"));
+  ok("renderHome deriva a faixa da seleção pura (limite de 7 explícito)",
+    body.includes("HomeInsights.recentCompletedWorkouts(state.history, HomeInsights.RECENT_LIMIT, now)"));
+  ok("renderHome usa UMA data de referência para resumo, card de hoje e faixa",
+    /const now = new Date\(\);/.test(body) && body.includes("HomeInsights.build(state.history, now)"));
+  ok("renderHome preenche a faixa e o estado vazio",
+    ["home-recent-strip", "home-recent-empty"].every((id) => body.includes(id)) &&
+    body.includes("recent.length ? 'none' : ''"));
+  ok("os cards usam o rótulo relativo confiável (daysAgo/dateISO), nunca texto livre",
+    body.includes("homeDayLabel(item.daysAgo, item.dateISO") &&
+    helper.includes("daysAgo <= 0") && helper.includes("daysAgo === 1") &&
+    helper.includes("t.date_today") && helper.includes("t.date_yesterday") &&
+    helper.includes("t.date_days_ago") && helper.includes(".replace('{n}'"));
+  ok("estado vazio é localizado (nenhum valor estático de reserva)",
+    body.includes("t.home_no_workout_today") &&
+    /id="home-recent-empty"[^>]*data-i18n="no_recent_workouts"/.test(home));
+  ok("texto do usuário entra por textContent no card de hoje",
+    (body.match(/\.textContent = /g) || []).length >= 3);
+  ok("os cards da faixa escapam nome/metadados e usam o MESMO nome no card e no rótulo (5.1.3)",
+    body.includes("TTUtils.escapeHtml(name)") && body.includes("TTUtils.escapeHtml(meta)") &&
+    body.includes("TTUtils.escapeHtml(label)") &&
+    /const name = item\.name \|\| t\.no_workout;/.test(body) &&
+    body.includes("[name, when, duration, exercises].filter(Boolean).join(', ')"));
+  ok("a faixa tem nome acessível resolvido pelo idioma ativo",
+    body.includes("getAttribute('data-i18n-label')") && body.includes("setAttribute('aria-label'"));
+  ok("a seção de treinos recentes é renderizada na Home (mesmo renderHome)",
+    /if \(screenId === 'home'\) renderHome\(\);/.test(html) &&
+    /I18n\.onChange\(\(\) => renderHome\(\)\)/.test(html));
+  ok("o selo de status do card único NÃO reaparece de forma estática na faixa",
+    !/class="history-status"[^>]*data-i18n/.test(home));
+
+  // --- i18n das chaves novas (pt/en/es) ------------------------------------
+  const isb = makeSandbox();
+  loadModules(isb, ["js/i18n.js"]);
+  const dict = isb.I18n.dict;
+  const KEYS511 = ["date_today", "date_yesterday", "date_days_ago",
+    "home_no_workout_today", "home_no_history"];
+  ok("5 chaves da 5.1.1 em pt/en/es",
+    ["pt", "en", "es"].every((l) => KEYS511.every((k) => typeof dict[l][k] === "string" && dict[l][k].trim() !== "")));
+  ok("today_workout deixou de ser nome de treino mockado",
+    ["pt", "en", "es"].every((l) => !/Treino A|Workout A|Entreno A/.test(dict[l].today_workout)));
+  ok("chave do rótulo relativo tem espaço para o número",
+    ["pt", "en", "es"].every((l) => dict[l].date_days_ago.indexOf("{n}") !== -1));
+
+  const KEYS512 = ["recent_workouts", "recent_strip_label", "no_recent_workouts",
+    "see_full_history", "exercises_count", "exercises_count_one"];
+  ok("6 chaves da 5.1.2 em pt/en/es",
+    ["pt", "en", "es"].every((l) => KEYS512.every((k) => typeof dict[l][k] === "string" && dict[l][k].trim() !== "")));
+  ok("contagem de exercícios tem forma singular distinta (1 exercício, não '1 exercícios')",
+    ["pt", "en", "es"].every((l) => dict[l].exercises_count_one !== dict[l].exercises_count));
+  ok("nenhuma chave da 5.1.2 repete texto de treino mockado",
+    ["pt", "en", "es"].every((l) => KEYS512.every((k) => !/Treino A|Treino B|Workout A|Entreno A/.test(dict[l][k]))));
+}
+
+// ---------------------------------------------------------------------------
+// Cardio: criação -> persistência -> recarga -> leitura semanal (E5.1.1)
+// ---------------------------------------------------------------------------
+function testCardioPipeline() {
+  const sb = makeSandbox();
+  loadModules(sb, [
+    "js/utils.js", "services/storage.js", "js/i18n.js", "js/workout-session.js",
+    "js/persistence.js", "js/pr.js", "js/workout-controller.js", "js/home-insights.js",
+  ]);
+  const C = sb.WorkoutController;
+  const P = sb.Persistence;
+  const H = sb.HomeInsights;
+
+  suite("Cardio: criação -> persistência -> leitura (Sprint 5.1.1)");
+
+  const T0 = new Date(2026, 9, 14, 10, 0, 0);
+  const T40 = new Date(2026, 9, 14, 10, 40, 0);
+
+  // 1) criação/gravação: a modalidade da sessão não se perde na entrada.
+  const cardioSession = {
+    id: "s_cardio_1", letter: "C", routineName: "Esteira", category: "cardio",
+    startedAt: T0, exercises: [{ catalogId: "c-esteira", name: "Esteira", completedSets: [{ weight: 0, reps: 1 }] }],
+  };
+  const appended = C.appendToHistory([], cardioSession, "completed", T40);
+  ok("cardio marcado continua marcado na entrada do histórico",
+    appended.ok && appended.entry.category === "cardio", JSON.stringify(appended.entry));
+  eq("duração da sessão vira durationMin na entrada", appended.entry.durationMin, 40);
+  ok("entrada de força (sem marcação) não ganha modalidade por inferência",
+    !("category" in C.buildHistoryEntry({
+      id: "s_forca_1", letter: "A", routineName: "Peito", startedAt: T0,
+      exercises: [{ catalogId: "c1", name: "Supino", completedSets: [{ weight: 50, reps: 8 }] }],
+    }, "completed", T40)));
+
+  // 2) persistência: round-trip pelo storage (JSON) preserva a modalidade.
+  P.saveHistory(appended.history);
+  const raw = sb.localStorage.getItem("tt_ds_v1_history");
+  ok("cardio gravado no storage com a marcação",
+    !!raw && raw.indexOf('"category":"cardio"') !== -1 && raw.indexOf('"durationMin":40') !== -1);
+
+  // 3) recarga: a hidratação reconstrói a entrada ainda como cardio.
+  const reloaded = {};
+  P.hydrate(reloaded);
+  const cardio = reloaded.history.filter((e) => e.sessionId === "s_cardio_1")[0];
+  ok("após a recarga o registro continua cardio",
+    !!cardio && cardio.category === "cardio" && cardio.type === undefined);
+  eq("após a recarga a duração é preservada", cardio.durationMin, 40);
+
+  // 4) leitura semanal: cardio conta; força e legado sem marcação não.
+  eq("resumo semanal soma o cardio sobrevivente à recarga",
+    H.build(reloaded.history, T40).cardioMinutes, 40);
+
+  const mixed = [
+    { id: 1, name: "Corrida", status: "completed", dateISO: "2026-10-14", category: "cardio", durationMin: 25 },
+    { id: 2, name: "Bicicleta", status: "completed", dateISO: "2026-10-14", type: "cardio", durationMin: "35" },
+    { id: 3, name: "Treino A — Peito", status: "completed", dateISO: "2026-10-14", durationMin: 60 },
+    { id: 4, name: "Legado", status: "completed", date: "Ontem, 18:30", duration: "50 min" },
+    { id: 5, name: "Corrida sem duração", status: "completed", dateISO: "2026-10-14", category: "cardio" },
+    { id: 6, name: "Corrida corrompida", status: "completed", dateISO: "2026-10-14", category: "cardio", durationMin: "x" },
+  ];
+  eq("cardio soma category/type e ignora musculação, legado e duração inválida",
+    H.build(mixed, T40).cardioMinutes, 60);
+  eq("histórico misto preserva todas as entradas (nada é duplicado pela leitura)",
+    H.build(mixed, T40).days[2].count, 5);
+
+  // 5) sanitização (via round-trip de storage) não converte a modalidade nem
+  //    ressuscita valor inválido.
+  P.saveHistory(mixed);
+  const restoredMixed = {};
+  P.hydrate(restoredMixed);
+  const clean = restoredMixed.history;
+  const byId = (id) => clean.filter((e) => e.id === id)[0];
+  ok("sanitizeHistory preserva category/type sem conversão",
+    byId(1).category === "cardio" && byId(2).type === "cardio");
+  ok("sanitizeHistory mantém durationMin inválido fora da soma (0, não NaN)",
+    byId(6).durationMin === 0 && H.build(clean, T40).cardioMinutes === 60);
+  ok("sanitizeHistory descarta modalidade vazia em vez de inferir",
+    !("category" in byId(3)) && !("type" in byId(3)));
+}
+
+// ---------------------------------------------------------------------------
+// Rotina: exercícios salvos (bug 5.2 — o buffer da edição era descartado)
+// ---------------------------------------------------------------------------
+function testRoutinePersistence() {
+  const sb = makeSandbox();
+  loadModules(sb, ["js/utils.js", "services/storage.js", "js/i18n.js", "js/persistence.js"]);
+  const P = sb.Persistence;
+  const S = sb.StorageService;
+
+  suite("Rotina: exercícios persistidos (bug 5.2)");
+
+  // Estado montado como o `tempEditRoutine` do fluxo real (2 exercícios
+  // adicionados pelo catálogo, o primeiro já reconfigurado).
+  const rotina = {
+    id: "rD", letter: "D", name: "Novo treino",
+    exercises: [
+      { catalogId: "A-01", sets: 5, reps: 11, weight: 25, rest: 75 },
+      { catalogId: "A-02", sets: 3, reps: 10, weight: 20, rest: 60 },
+    ],
+  };
+  ok("salvar a rotina com exercícios devolve sucesso", P.saveRoutines([rotina]) === true);
+
+  const alvo = { routines: [], history: [], lang: "pt", autoRestEnabled: true };
+  P.hydrate(alvo);
+  eq("os DOIS exercícios sobrevivem ao round-trip", alvo.routines[0].exercises.length, 2);
+  eq("catalogId preservado na ordem",
+    alvo.routines[0].exercises.map((e) => e.catalogId), ["A-01", "A-02"]);
+  eq("séries/reps/carga/descanso preservados",
+    alvo.routines[0].exercises[0], { catalogId: "A-01", sets: 5, reps: 11, weight: 25, rest: 75 });
+  ok("nenhum exercício duplicado na leitura",
+    new Set(alvo.routines[0].exercises.map((e) => e.catalogId)).size === 2);
+
+  // Compatibilidade: registro legado sem `exercises` não pode sumir nem
+  // inventar exercício — e não pode derrubar as rotinas enriquecidas ao lado.
+  S.save("routines", [{ id: "rLegado", letter: "Y", name: "Legado" }, rotina]);
+  const legado = { routines: [], history: [], lang: "pt", autoRestEnabled: true };
+  P.hydrate(legado);
+  eq("rotina legada é preservada", legado.routines.length, 2);
+  eq("rotina legada ganha lista vazia (nada é inventado)", legado.routines[0].exercises, []);
+  eq("rotina enriquecida ao lado do legado continua inteira", legado.routines[1].exercises.length, 2);
+
+  // Falha de gravação: false — nunca "sucesso silencioso" — com storage ATIVO
+  // (quota/erro no setItem). Assim o contrato de "modo memória" não se confunde.
+  const sbQuota = makeSandbox();
+  const setItemOriginal = sbQuota.localStorage.setItem.bind(sbQuota.localStorage);
+  sbQuota.localStorage.setItem = (k, v) => {
+    if (String(v).length > 10) throw new Error("QuotaExceededError");
+    return setItemOriginal(k, v);
+  };
+  loadModules(sbQuota, ["js/utils.js", "services/storage.js", "js/i18n.js", "js/persistence.js"]);
+  const Pq = sbQuota.Persistence;
+  ok("storage segue habilitado (falha de gravação, não modo memória)", Pq.isEnabled() === true);
+  ok("saveRoutines devolve false quando a gravação falha", Pq.saveRoutines([rotina]) === false);
+
+  // Travas de origem do defeito: voltar para a edição (do catálogo/configurar)
+  // NÃO pode recopiar o buffer do estado.
+  const html = fs.readFileSync(path.join(ROOT, "TreinoTracker_DeepSeek.html"), "utf8");
+  ok("rota 'edit' com rotina abre edição nova; sem rotina mantém a edição em andamento",
+    html.includes("if (screenId === 'edit') {") &&
+    html.includes("if (param) startEditRoutine(param);") &&
+    html.includes("else showEditScreen();"));
+  ok("a rota antiga (recopiar o buffer SEMPRE) não existe mais",
+    !html.includes("if (screenId === 'edit') startEditRoutine(param || state.editingRoutineId);"));
+  const corpoShow = html.slice(html.indexOf("function showEditScreen()"), html.indexOf("function renderEditList()"));
+  ok("showEditScreen redesenha o buffer e nunca o sobrescreve",
+    corpoShow.includes("renderEditList()") && !corpoShow.includes("tempEditRoutine ="));
+  ok("o '+' do catálogo continua empurrando no buffer da edição",
+    html.includes("state.tempEditRoutine.exercises.push({"));
+  ok("'Salvar' só troca o estado DEPOIS de gravar (falha não vira sucesso)",
+    html.includes("if (!persistRoutines(next)) {") && html.includes("state.routines = next;"));
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 (async function main() {
@@ -2316,7 +3043,12 @@ function testRestOverlayDialogE71() {
   testActionGuard();
   testWorkoutPlayerE7();
   testRestOverlayDialogE71();
+  testHomeInsights();
+  testHomeWeeklyWiring();
+  testHomeCardsWiring();
+  testCardioPipeline();
   testWiring();
+  testRoutinePersistence();
 
   console.log("\n==========================================");
   console.log(passed + " checagens OK, " + failures.length + " falha(s)");

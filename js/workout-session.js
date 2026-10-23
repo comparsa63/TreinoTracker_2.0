@@ -193,8 +193,11 @@
     if (!raw || typeof raw !== "object") return null;
     const w = toNum(raw.weight != null ? raw.weight : raw.carga);
     const r = toNum(raw.reps != null ? raw.reps : raw.repeticoes);
-    if (w === null || r === null) return null;
-    return { weight: Math.max(0, w), reps: Math.max(0, Math.round(r)) };
+    // A mesma regra da entrada normal (`completeSet`): uma série concluída
+    // precisa de ao menos uma repetição. Ao restaurar, descartar é mais seguro
+    // que "corrigir" 0 para 1 e inventar progresso que não existiu.
+    if (w === null || r === null || r < 1) return null;
+    return { weight: Math.max(0, w), reps: Math.round(r) };
   }
 
   /** Sanitiza um exercício já persistido (modo tolerante: corrige, não inventa). */

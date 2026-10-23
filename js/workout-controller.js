@@ -67,6 +67,7 @@
     "no-session": "Nenhum treino em andamento.",
     "invalid-session": "Sessão de treino inválida.",
     "invalid-routine": "Rotina inválida para iniciar o treino.",
+    "empty-routine": "Adicione pelo menos um exercício antes de iniciar o treino.",
     "invalid-status": "Status de histórico inválido.",
     "no-exercise": "Não há exercício para concluir.",
     "invalid-set": "Informe carga (maior ou igual a 0) e repetições (maior ou igual a 1).",
@@ -235,6 +236,12 @@
       const options = typeof resolve === "function" ? { resolve: resolve } : undefined;
       const session = W.create(routine, now, options);
       if (!session) return fail("invalid-routine");
+      // O domínio aceita uma rotina vazia para manter suas operações puras e
+      // tolerantes. O Player, porém, não tem exercício para renderizar: não
+      // criamos nem persistimos uma sessão que a UI não consegue executar.
+      if (!Array.isArray(session.exercises) || session.exercises.length === 0) {
+        return fail("empty-routine");
+      }
       const res = done(session);
       res.persisted = WorkoutController.save(session).ok;
       return res;
@@ -511,6 +518,14 @@
         status: status,
         exercises: exercises,
       };
+
+      // Sprint 5.1.1: marcadores de MODALIDADE (aditivo). O resumo semanal da Home
+      // reconhece cardio por `category`/`type` na ENTRADA; sem esta passagem uma
+      // sessão já marcada perderia a classificação ao ser registrada e o cardio
+      // deixaria de contar — em memória e, principalmente, após a recarga.
+      // Sessões sem marcação continuam gerando exatamente a mesma entrada.
+      if (typeof session.category === "string" && session.category !== "") entry.category = session.category;
+      if (typeof session.type === "string" && session.type !== "") entry.type = session.type;
 
       const key = sessionKey(session);
       if (key) entry.sessionId = key;

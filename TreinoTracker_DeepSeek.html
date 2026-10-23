@@ -151,6 +151,35 @@
             background: var(--card-bg); padding: 16px; border-radius: var(--border-radius-sm);
             display: flex; justify-content: space-between; align-items: center;
         }
+        /* ================= HOME: RESUMO SEMANAL (Sprint 5.1) ================= */
+        .home-insights { margin-top: 28px; }
+        .home-insights-title { margin-bottom: 12px; font-size: 1rem; }
+        .weekly-strip { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px; scrollbar-width: thin; scroll-snap-type: x proximity; }
+        .weekly-day { flex: 0 0 76px; min-height: 102px; padding: 10px 8px; border-radius: var(--border-radius-sm); background: var(--card-bg); display: flex; flex-direction: column; gap: 5px; scroll-snap-align: start; }
+        .weekly-day-name { color: var(--text-muted); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; }
+        .weekly-day-date { font-size: 1.05rem; font-weight: 800; }
+        .weekly-day-workout { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--primary); font-size: 0.72rem; font-weight: 700; }
+        .weekly-day.empty .weekly-day-workout { color: var(--text-muted); font-weight: 500; }
+        .weekly-day-more { color: var(--text-muted); font-size: 0.68rem; }
+        .home-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }
+        .home-metric { background: var(--card-bg); border-radius: var(--border-radius-sm); padding: 14px; }
+        .home-metric-label { color: var(--text-muted); font-size: 0.78rem; margin-bottom: 6px; }
+        .home-metric-value { color: var(--primary); font-size: 1.25rem; font-weight: 800; line-height: 1.2; }
+        .home-metric-note { color: var(--text-muted); font-size: 0.72rem; margin-top: 4px; }
+
+        /* ================= HOME: ÚLTIMOS TREINOS (Sprint 5.1.2) ================= */
+        /* Uma única faixa horizontal: as regras valem só para os cards de treino
+           concluído e não substituem a faixa semanal (componente distinto). */
+        .recent-strip { display: flex; gap: 12px; overflow-x: auto; padding: 2px 2px 10px; scrollbar-width: thin; scroll-snap-type: x proximity; }
+        .recent-strip:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: var(--border-radius-sm); }
+        /* Sprint 5.1.3 (M2): largura PROPORCIONAL à faixa = 2 cards inteiros + o
+           começo do 3º ("peek") em QUALQUER largura. Antes, com base fixa de
+           168px, a faixa de 384–396px caía numa zona morta: cabiam 2 cards e o
+           3º ficava inteiro fora da tela, sem pista visual de que havia mais. */
+        .recent-card { flex: 0 0 calc((100% - 24px) / 2.25); min-width: 0; min-height: 96px; padding: 14px; border-radius: var(--border-radius-sm); background: var(--card-bg); display: flex; flex-direction: column; gap: 4px; scroll-snap-align: start; }
+        .recent-card-name { font-size: 0.9rem; font-weight: 700; overflow-wrap: anywhere; }
+        .recent-card-meta { color: var(--text-muted); font-size: 0.75rem; }
+        .recent-empty { color: var(--text-muted); font-size: 0.85rem; padding: 4px 2px; }
 
         /* ================= TELA 2: MEUS TREINOS ================= */
         .routine-list { display: flex; flex-direction: column; gap: 12px; }
@@ -437,20 +466,39 @@
             <p class="text-muted" data-i18n="greeting_sub">Pronto para o treino de hoje?</p>
         </div>
         <div class="card-highlight">
-            <h3 data-i18n="today_workout">Treino A — Peito e Tríceps</h3>
+            <p class="text-muted" style="font-size: 0.8rem; margin-bottom: 4px;" data-i18n="today_workout">Treino de hoje</p>
+            <h3 id="home-today-name">—</h3>
             <div style="display: flex; gap: 16px; margin: 16px 0;">
-                <div><span class="text-muted" style="font-size: 0.8rem;" data-i18n="exercises">Exercícios</span><p style="font-weight: 700;">6</p></div>
-                <div><span class="text-muted" style="font-size: 0.8rem;" data-i18n="duration">Duração</span><p style="font-weight: 700;">45 min</p></div>
+                <div><span class="text-muted" style="font-size: 0.8rem;" data-i18n="exercises">Exercícios</span><p id="home-today-exercises" style="font-weight: 700;">—</p></div>
+                <div><span class="text-muted" style="font-size: 0.8rem;" data-i18n="duration">Duração</span><p id="home-today-duration" style="font-weight: 700;">—</p></div>
             </div>
             <button class="btn btn-primary" style="width: 100%;" onclick="navigate('workouts')" data-i18n="start_workout">INICIAR TREINO</button>
         </div>
-        <div style="margin-top: 32px;">
-            <h4 style="margin-bottom: 12px; font-size: 1rem;" data-i18n="last_workout">Último Treino</h4>
-            <div class="last-workout">
-                <div><h4 style="font-size: 1rem;">Treino B — Costas e Bíceps</h4><p class="text-muted" style="font-size: 0.8rem;">Ontem • 50 min</p></div>
-                <div class="history-status" data-i18n="completed">Concluído</div>
+        <section style="margin-top: 32px;" aria-labelledby="home-recent-title">
+            <h4 id="home-recent-title" style="margin-bottom: 12px; font-size: 1rem;" data-i18n="recent_workouts">Últimos treinos</h4>
+            <!-- Sprint 5.1.2: faixa horizontal com os últimos treinos CONCLUÍDOS do
+                 histórico real (máx. 7), do mais recente para o mais antigo. Nada é
+                 escrito aqui de forma estática: renderHome preenche os cards ou
+                 mostra o estado vazio. `tabindex="0"` deixa a faixa rolável por
+                 teclado (setas), com foco visível. -->
+            <div id="home-recent-strip" class="recent-strip" role="list" tabindex="0" data-i18n-label="recent_strip_label"></div>
+            <p id="home-recent-empty" class="recent-empty" data-i18n="no_recent_workouts">Nenhum treino concluído ainda</p>
+            <button class="btn btn-sm" style="width: 100%; margin-top: 12px;" onclick="navigate('history')" data-i18n="see_full_history">Ver histórico completo</button>
+        </section>
+        <section class="home-insights" aria-labelledby="home-weekly-title">
+            <h3 id="home-weekly-title" class="home-insights-title" data-i18n="weekly_summary">Resumo da semana</h3>
+            <div id="home-weekly-strip" class="weekly-strip" role="list" data-i18n-label="weekly_strip_label"></div>
+            <div class="home-metrics">
+                <article class="home-metric">
+                    <p class="home-metric-label" data-i18n="cardio_week">Cardio da semana</p>
+                    <p id="home-cardio-value" class="home-metric-value">0 / 150 min</p>
+                </article>
+                <article class="home-metric">
+                    <p class="home-metric-label" data-i18n="consecutive_days">Dias seguidos</p>
+                    <p id="home-streak-value" class="home-metric-value">0 dias</p>
+                </article>
             </div>
-        </div>
+        </section>
     </section>
 
     <!-- ================= TELA 2: MEUS TREINOS ================= -->
@@ -771,6 +819,7 @@
 
 <!-- ================= MÓDULOS DA APP (carregam antes do script principal) ================= -->
 <script src="js/utils.js"></script>
+<script src="js/home-insights.js"></script>
 <script src="services/storage.js"></script>
 <script src="js/i18n.js"></script>
 <script src="js/data/exercises.js"></script>
@@ -872,9 +921,19 @@
         document.getElementById('main-nav').style.display = (screenId === 'player') ? 'none' : 'flex';
         window.scrollTo(0, 0);
 
+        if (screenId === 'home') renderHome();
         if (screenId === 'workouts') renderRoutines();
         if (screenId === 'details') renderDetails(param || state.editingRoutineId);
-        if (screenId === 'edit') startEditRoutine(param || state.editingRoutineId);
+        // `edit` COM `param` (rotina escolhida na lista/detalhes ou recém-criada)
+        // abre uma edição NOVA a partir do estado. SEM `param` (voltando do
+        // catálogo ou de "Configurar exercício") a tela mantém a edição EM
+        // ANDAMENTO: recopiar `tempEditRoutine` aqui descartava em silêncio o
+        // exercício recém-adicionado e os ajustes de séries/reps/carga/descanso —
+        // era o defeito "os exercícios não ficam salvos ao salvar o treino".
+        if (screenId === 'edit') {
+            if (param) startEditRoutine(param);
+            else showEditScreen();
+        }
         if (screenId === 'add-exercise') renderCatalog();
         if (screenId === 'config-exercise') renderConfigExercise(param);
         if (screenId === 'prep') renderPrep();
@@ -945,12 +1004,34 @@
         }).join('');
     }
 
+    /**
+     * Abre uma edição NOVA a partir do estado (`state.routines`): usada quando a
+     * navegação traz a rotina escolhida (lista, detalhes ou recém-criada).
+     */
     function startEditRoutine(routineId) {
         state.editingRoutineId = routineId;
         const r = state.routines.find(x => x.id === routineId);
         state.tempEditRoutine = JSON.parse(JSON.stringify(r));
         document.getElementById('edit-title').innerText = `Editar Treino ${r.letter}`;
         renderEditList();
+    }
+
+    /**
+     * Redesenha a edição EM ANDAMENTO (`state.tempEditRoutine`) sem recopiar do
+     * estado. É o caso de voltar do catálogo (`addExerciseToRoutine`) ou de
+     * "Configurar exercício" (`saveExerciseConfig`): enquanto não houver
+     * `saveRoutineEdits()`, o buffer é a fonte da verdade da tela — o treino
+     * persistido só muda quando o usuário salva.
+     * Sem buffer (ou com buffer de OUTRA rotina) cai no caminho normal.
+     */
+    function showEditScreen() {
+        const t = state.tempEditRoutine;
+        if (t && t.id === state.editingRoutineId) {
+            document.getElementById('edit-title').innerText = `Editar Treino ${t.letter}`;
+            renderEditList();
+            return;
+        }
+        startEditRoutine(state.editingRoutineId);
     }
 
     function renderEditList() {
@@ -997,8 +1078,20 @@
 
     function saveRoutineEdits() {
         const index = state.routines.findIndex(r => r.id === state.editingRoutineId);
-        state.routines[index] = JSON.parse(JSON.stringify(state.tempEditRoutine));
-        Persistence.saveRoutines(state.routines);
+        if (index === -1) {
+            showToast('Treino não encontrado.', 'error');
+            return;
+        }
+        // A lista é montada à parte e só substitui o estado DEPOIS da gravação:
+        // se o storage falhar, memória e disco seguem iguais e a falha aparece
+        // (nunca como um "salvo com sucesso" silencioso).
+        const next = state.routines.slice();
+        next[index] = JSON.parse(JSON.stringify(state.tempEditRoutine));
+        if (!persistRoutines(next)) {
+            showToast('Não foi possível salvar o treino.', 'error');
+            return;
+        }
+        state.routines = next;
         navigate('details', state.editingRoutineId);
     }
 
@@ -1739,6 +1832,10 @@
 
         Persistence.saveHistory(state.history);
 
+        // Sprint 5.1: o resumo semanal da Home é DERIVADO do histórico — assim
+        // que ele muda, o resumo precisa ser redesenhado (sem esperar navegação).
+        renderHome();
+
         // Histórico gravado: não há mais nada a retomar.
         WorkoutController.clear();
 
@@ -1767,6 +1864,123 @@
                 ? `<p class="text-muted" style="margin:0; font-size:0.85rem;">Top: <strong style="color:var(--text-main)">${TTUtils.escapeHtml(stats.topExercise)}</strong> (${stats.topCount})</p>`
                 : ''}
         `;
+    }
+
+    // ================= HOME: RESUMO SEMANAL (Sprint 5.1) =================
+    // A faixa de segunda a domingo e os dois cards são DERIVADOS do histórico
+    // real por `js/home-insights.js` (módulo puro). Nada aqui inventa dado: sem
+    // registro no período, a semana aparece vazia e o cardio fica "0 / meta".
+    const HOME_WEEKDAY_KEYS = ['weekday_mon', 'weekday_tue', 'weekday_wed', 'weekday_thu', 'weekday_fri', 'weekday_sat', 'weekday_sun'];
+
+    /**
+     * Rótulo RELATIVO do dia, calculado a partir de uma data CONFIÁVEL (`daysAgo`
+     * derivado do `dateISO`) e no idioma ativo: hoje/ontem, "há N dias" na
+     * primeira semana e data absoluta (dd/mm) depois. O texto livre do legado
+     * (ex.: "Ontem, 18:30") nunca é usado como data nem como rótulo.
+     */
+    function homeDayLabel(daysAgo, dateISO, t) {
+        if (daysAgo <= 0) return t.date_today;
+        if (daysAgo === 1) return t.date_yesterday;
+        if (daysAgo < 7) return String(t.date_days_ago || '{n}').replace('{n}', String(daysAgo));
+        const iso = typeof dateISO === 'string' ? dateISO : '';
+        return iso.length === 10 ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : '';
+    }
+
+    function renderHome() {
+        if (typeof HomeInsights === 'undefined' || !HomeInsights) return;
+        const t = translations[state.lang] || translations.pt;
+        // Data de referência EXPLÍCITA: a semana corrente do usuário.
+        const now = new Date();
+        const insights = HomeInsights.build(state.history, now);
+
+        // Sprint 5.1.1: os cards da Home tinham valores FICTÍCIOS no markup.
+        // Agora saem do histórico real: "Treino de hoje" = registro do dia da
+        // referência. Sem registro válido o card mostra estado vazio LOCALIZADO —
+        // nunca um valor estático.
+        const today = HomeInsights.todayWorkout(state.history, now);
+
+        const todayName = document.getElementById('home-today-name');
+        // Texto vindo do histórico/user: escrito por textContent (sem HTML).
+        if (todayName) todayName.textContent = today ? today.name : t.home_no_workout_today;
+        const todayExercises = document.getElementById('home-today-exercises');
+        if (todayExercises) todayExercises.textContent = today && today.exercises > 0 ? String(today.exercises) : '—';
+        const todayDuration = document.getElementById('home-today-duration');
+        if (todayDuration) todayDuration.textContent = today && today.durationMin > 0 ? today.durationMin + ' min' : '—';
+
+        // Sprint 5.1.2: "Último treino" (um card estático) virou "Últimos treinos":
+        // faixa horizontal com os últimos CONCLUÍDOS, do mais recente para o mais
+        // antigo. Seleção/ordenação ficam em HomeInsights (função pura); aqui só
+        // apresentação. Sem registro elegível a faixa fica vazia e o estado vazio
+        // localizado aparece — nenhum card é inventado para "completar" a faixa.
+        const recent = HomeInsights.recentCompletedWorkouts(state.history, HomeInsights.RECENT_LIMIT, now);
+        const recentStrip = document.getElementById('home-recent-strip');
+        if (recentStrip) {
+            const recentLabelKey = recentStrip.getAttribute('data-i18n-label');
+            if (recentLabelKey) recentStrip.setAttribute('aria-label', t[recentLabelKey] || recentLabelKey);
+
+            recentStrip.innerHTML = recent.map((item) => {
+                const when = homeDayLabel(item.daysAgo, item.dateISO, t);
+                const duration = item.durationMin > 0 ? `${item.durationMin} min` : '';
+                const exercises = item.exercises > 0
+                    ? `${item.exercises} ${item.exercises === 1 ? t.exercises_count_one : t.exercises_count}`
+                    : '';
+                // Sprint 5.1.3 (M3): o MESMO nome alimenta o card visível e o
+                // rótulo acessível — registro sem nome mostra o neutro localizado
+                // nos dois (antes o card dizia "Sem treino" e o leitor de tela
+                // anunciava só data/duração, divergindo do que está na tela).
+                const name = item.name || t.no_workout;
+                // Uma linha de "quando + duração" e uma de "exercícios"; o que não
+                // existe no registro simplesmente não aparece (nada é inventado).
+                const meta = [when, duration].filter(Boolean).join(' • ');
+                // Rótulo acessível: mesmas informações, em itens separados por
+                // vírgula (o separador visual "•" seria lido como "bullet").
+                const label = [name, when, duration, exercises].filter(Boolean).join(', ');
+                return `
+                    <div class="recent-card" role="listitem" aria-label="${TTUtils.escapeHtml(label)}">
+                        <span class="recent-card-name">${TTUtils.escapeHtml(name)}</span>
+                        <span class="recent-card-meta">${TTUtils.escapeHtml(meta)}</span>
+                        ${exercises ? `<span class="recent-card-meta">${TTUtils.escapeHtml(exercises)}</span>` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+        const recentEmpty = document.getElementById('home-recent-empty');
+        if (recentEmpty) recentEmpty.style.display = recent.length ? 'none' : '';
+
+        const strip = document.getElementById('home-weekly-strip');
+        if (strip) {
+            // A chave do nome acessível da faixa vem declarada no próprio markup
+            // (`data-i18n-label`), resolvida aqui para seguir o idioma ativo.
+            const labelKey = strip.getAttribute('data-i18n-label');
+            if (labelKey) strip.setAttribute('aria-label', t[labelKey] || labelKey);
+
+            strip.innerHTML = insights.days.map((day, index) => {
+                const weekday = t[HOME_WEEKDAY_KEYS[index]] || '';
+                const hasWorkout = day.count > 0;
+                // A célula mostra a LETRA do treino (ou o nome, truncado pelo CSS);
+                // o nome completo fica no aria-label. Texto do usuário -> escapado.
+                const mark = hasWorkout ? (day.entry.letter || day.entry.name || '') : '';
+                const more = day.extra > 0 ? '+' + day.extra : '';
+                const label = hasWorkout
+                    ? `${weekday} ${day.dayOfMonth}: ${day.entry.name || ''}` +
+                      (day.count > 1 ? `, ${day.count} ${t.workouts_count}` : '')
+                    : `${weekday} ${day.dayOfMonth}: ${t.no_workout}`;
+                return `
+                    <div class="weekly-day${hasWorkout ? '' : ' empty'}" role="listitem" aria-label="${TTUtils.escapeHtml(label)}">
+                        <span class="weekly-day-name">${TTUtils.escapeHtml(weekday)}</span>
+                        <span class="weekly-day-date">${day.dayOfMonth}</span>
+                        <span class="weekly-day-workout">${TTUtils.escapeHtml(mark || t.no_workout)}</span>
+                        ${more ? `<span class="weekly-day-more">${more}</span>` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        const cardio = document.getElementById('home-cardio-value');
+        if (cardio) cardio.innerText = `${insights.cardioMinutes} / ${insights.cardioGoal} min`;
+
+        const streak = document.getElementById('home-streak-value');
+        if (streak) streak.innerText = `${insights.consecutiveDays} ${t.days}`;
     }
 
     function renderHistory() {
@@ -1918,6 +2132,9 @@
         // E7: nomes acessíveis dos controles simbólicos do Player (+15s/−15s/✕).
         applyPlayerA11yLabels();
         I18n.onChange(() => applyPlayerA11yLabels());
+        // Sprint 5.1: a Home semanal é texto derivado do histórico (nomes de dias,
+        // com ou sem treino, contadores) -> redesenha quando o idioma muda.
+        I18n.onChange(() => renderHome());
 
         // Sprint 4: se havia uma sessão de treino em andamento, oferece
         // retomar ou descartar (o estado já veio sanitizado pelo domínio).
