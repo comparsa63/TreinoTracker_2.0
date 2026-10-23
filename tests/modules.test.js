@@ -168,6 +168,22 @@ function testStorage() {
   ok("sem localStorage não lança em save", S.save("x", 1) === false);
   eq("sem localStorage ainda lê da memória", S.load("x", null), 1);
   ok("sem localStorage isPersistent=false", S.isPersistent() === false);
+
+  // memoryFallback:false não pode deixar uma cópia antiga da memória
+  // ressurgir quando o backend volta a existir e falha na gravação.
+  sb.localStorage = {
+    get length() { return 0; },
+    key() { return null; },
+    getItem() { return null; },
+    setItem(key) {
+      if (key === "tt_ds_v1___probe__") return;
+      throw new Error("QuotaExceededError");
+    },
+    removeItem() {},
+  };
+  ok("backend ativo falha sem memoryFallback",
+    S.save("stale", 2, { memoryFallback: false }) === false);
+  eq("cópia antiga da memória não ressurge", S.load("stale", "fallback"), "fallback");
 }
 
 // ---------------------------------------------------------------------------
@@ -181,13 +197,70 @@ function testI18n() {
   suite("I18n");
 
   ok("3 idiomas", I.LOCALES.join(",") === "pt,en,es");
-  eq("84 chaves (58 + 15 da Home semanal da E5.1 + 5 do card de hoje/último treino da E5.1.1 + 6 da faixa Últimos treinos da E5.1.2)", I.keys().length, 84);
+  eq("124 chaves (84 + 21 do cadastro + 17 do gerenciamento + 2 da A-09)", I.keys().length, 124);
 
   const ptKeys = Object.keys(I.dict.pt).sort();
   const enKeys = Object.keys(I.dict.en).sort();
   const esKeys = Object.keys(I.dict.es).sort();
   eq("pt e en têm o mesmo conjunto de chaves", enKeys, ptKeys);
   eq("pt e es têm o mesmo conjunto de chaves", esKeys, ptKeys);
+  const phase3Keys = [
+    "new_exercise", "new_exercise_title", "exercise_name", "exercise_name_placeholder",
+    "exercise_name_help", "muscle_group", "muscle_group_placeholder", "create_exercise",
+    "cancel", "back", "custom_badge", "add_exercise_aria", "custom_exercise_created",
+    "custom_exercise_save_error", "custom_exercise_unavailable", "custom_error_name_required",
+    "custom_error_name_too_long", "custom_error_name_duplicate_official",
+    "custom_error_name_duplicate_custom", "custom_error_muscle_required",
+    "custom_error_muscle_invalid",
+  ];
+  ok("textos do cadastro personalizado nos 3 idiomas",
+    phase3Keys.every((key) =>
+      ["pt", "en", "es"].every((locale) =>
+        typeof I.dict[locale][key] === "string" && I.dict[locale][key].length > 0 &&
+        I.dict[locale][key] !== key)));
+  ok("selo e rótulo acessível traduzidos",
+    I.dict.pt.custom_badge === "Personalizado" && I.dict.en.custom_badge === "Custom" &&
+      I.dict.es.custom_badge === "Personalizado" &&
+      I.dict.pt.add_exercise_aria.includes("{name}") &&
+      I.dict.en.add_exercise_aria.includes("{name}") &&
+      I.dict.es.add_exercise_aria.includes("{name}"));
+
+  // Sprint 5.2.1 — Fase 4: gerenciamento de exercícios personalizados.
+  const phase4Keys = [
+    "manage_custom_exercises", "custom_exercises_title", "custom_exercises_sub",
+    "custom_exercises_empty", "edit_exercise_title", "save_exercise", "delete",
+    "edit_custom_exercise_aria", "delete_custom_exercise_aria",
+    "delete_custom_exercise_title", "delete_custom_exercise_desc",
+    "custom_exercise_updated", "custom_exercise_deleted", "custom_exercise_delete_error",
+    "custom_error_in_use", "custom_error_not_found", "confirm",
+  ];
+  ok("textos do gerenciamento personalizado nos 3 idiomas",
+    phase4Keys.every((key) =>
+      ["pt", "en", "es"].every((locale) =>
+        typeof I.dict[locale][key] === "string" && I.dict[locale][key].length > 0 &&
+        I.dict[locale][key] !== key)));
+  const a09Keys = ["custom_exercise_partial_save", "custom_exercise_memory_only"];
+  ok("textos de descarte e modo memória nos 3 idiomas (A-09)",
+    a09Keys.every((key) =>
+      ["pt", "en", "es"].every((locale) =>
+        typeof I.dict[locale][key] === "string" && I.dict[locale][key].length > 0 &&
+        I.dict[locale][key] !== key)));
+  ok("ações e confirmação da exclusão são traduzidas",
+    I.dict.pt.delete === "Excluir" && I.dict.en.delete === "Delete" && I.dict.es.delete === "Eliminar" &&
+      I.dict.pt.confirm === "Confirmar" && I.dict.en.confirm === "Confirm" &&
+      I.dict.es.confirm === "Confirmar" &&
+      I.dict.pt.delete_custom_exercise_desc.includes("{name}") &&
+      I.dict.en.delete_custom_exercise_desc.includes("{name}") &&
+      I.dict.es.delete_custom_exercise_desc.includes("{name}") &&
+      I.dict.pt.custom_error_in_use.includes("{name}") &&
+      I.dict.en.custom_error_in_use.includes("{name}") &&
+      I.dict.es.custom_error_in_use.includes("{name}") &&
+      I.dict.pt.edit_custom_exercise_aria.includes("{name}") &&
+      I.dict.en.edit_custom_exercise_aria.includes("{name}") &&
+      I.dict.es.edit_custom_exercise_aria.includes("{name}") &&
+      I.dict.pt.delete_custom_exercise_aria.includes("{name}") &&
+      I.dict.en.delete_custom_exercise_aria.includes("{name}") &&
+      I.dict.es.delete_custom_exercise_aria.includes("{name}"));
 
   // Textos da Home (não podem mudar)
   eq("Home pt greeting", I.dict.pt.greeting, "Olá, Atleta");
@@ -416,6 +489,396 @@ function testCatalog() {
   ok("hasInstructions/getInstructions", C.hasInstructions("Supino reto") && C.getInstructions("Supino reto").length >= 3);
   ok("getMistakes/getTips", C.getMistakes("Supino reto").length > 0 && C.getTips("Supino reto").length > 0);
   ok("exercício sem instruções -> []", C.getInstructions("Prancha").length === 0);
+}
+
+// ---------------------------------------------------------------------------
+// CustomExercises (Sprint 5.2.1 — domínio dos exercícios personalizados)
+// ---------------------------------------------------------------------------
+function testCustomExercises() {
+  const sb = makeSandbox();
+  loadModules(sb, ["js/utils.js", "js/custom-exercises.js"]);
+  const CX = sb.CustomExercises;
+
+  const official = ["Supino reto", "Rosca direta barra", "Tríceps polia"];
+  const groups = ["Peito", "Bíceps", "Tríceps", "Costas", "Pernas"];
+
+  suite("CustomExercises (domínio)");
+
+  ok("expõe CustomExercises", !!CX && typeof CX.create === "function");
+  eq("prefixo de id estável", CX.ID_PREFIX, "cx_");
+  eq("limite do nome", CX.NAME_MAX, 60);
+  ok("isValidId aceita IDs gerados e formatos seguros",
+    CX.isValidId("cx_abc123") && CX.isValidId("cx_mvkf2rwex98stf") &&
+    CX.isValidId("cx_a-b_c"));
+  ok("isValidId rejeita payload e formatos inesperados",
+    !CX.isValidId("A-01") && !CX.isValidId("cx_") &&
+    !CX.isValidId("cx_');alert(1)//") && !CX.isValidId("cx_<script>") &&
+    !CX.isValidId(" cx_abc ") && !CX.isValidId("cx_abc def") &&
+    !CX.isValidId("cx_" + "a".repeat(128)));
+  eq("normalize usa a regra global", CX.normalize("  Tríceps   POLIA  "), "triceps polia");
+
+  // ── Nome ──────────────────────────────────────────────────────────────
+  eq("nome obrigatório", CX.validateName("   ", { list: [], officialNames: official }).reason, "name-required");
+  eq("nome acima de 60 rejeitado",
+    CX.validateName("x".repeat(61), { list: [], officialNames: official }).reason, "name-too-long");
+  ok("nome com exatamente 60 é aceito",
+    CX.validateName("x".repeat(60), { list: [], officialNames: official }).ok);
+  ok("limite considera o nome já trimado",
+    CX.validateName("  " + "x".repeat(60) + "  ", {}).ok);
+
+  // ── Duplicidade global (oficial + personalizados) ─────────────────────
+  eq("duplicidade oficial ignora caixa e extremos",
+    CX.validateName("  SUPINO RETO  ", { list: [], officialNames: official }).reason,
+    "name-duplicate-official");
+  eq("duplicidade oficial ignora acentos",
+    CX.validateName("triceps POLIA", { list: [], officialNames: official }).reason,
+    "name-duplicate-official");
+
+  const customList = [{ id: "cx_existente", name: "Rosca Scott", muscle: "Bíceps" }];
+  eq("duplicidade personalizada ignora caixa e extremos",
+    CX.validateName("  rosca SCOTT  ", { list: customList }).reason,
+    "name-duplicate-custom");
+  ok("update ignora o próprio id",
+    CX.validateName("Rosca Scott", { list: customList, ignoreId: "cx_existente" }).ok);
+  eq("findDuplicate oficial", CX.findDuplicate([], "supino reto", { officialNames: official }).source, "official");
+  eq("findDuplicate personalizado devolve id",
+    CX.findDuplicate(customList, "ROSCA SCOTT", {}).id, "cx_existente");
+  eq("officialName aceita string e objetos",
+    [CX.officialName("A"), CX.officialName({ nome: "B" }), CX.officialName({ pt: "C" }), CX.officialName({ name: "D" })],
+    ["A", "B", "C", "D"]);
+
+  // ── Grupo muscular ────────────────────────────────────────────────────
+  eq("grupo obrigatório", CX.validateMuscle("", groups).reason, "muscle-required");
+  eq("grupo fora da lista é rejeitado",
+    CX.validateMuscle("Panturrilha", groups).reason, "muscle-invalid");
+  eq("grupo é canonicalizado",
+    [CX.validateMuscle(" bíceps ", groups).ok, CX.validateMuscle(" bíceps ", groups).value],
+    [true, "Bíceps"]);
+  eq("sem lista de grupos o grupo não é validado",
+    CX.validateMuscle("Panturrilha").reason, "muscle-invalid");
+  eq("lista de grupos vazia recusa o grupo",
+    CX.validateMuscle("Peito", []).reason, "muscle-invalid");
+  eq("create exige a lista de grupos oficiais",
+    CX.create([], { name: "X", muscle: "Peito" }, {}).reason, "muscle-invalid");
+
+  // ── create ────────────────────────────────────────────────────────────
+  const base = [];
+  const created = CX.create(base, { name: "  Rosca Scott  ", muscle: "bíceps" },
+    { officialNames: official, groups });
+  ok("create devolve id cx_", created.ok && /^cx_/.test(created.exercise.id));
+  eq("create normaliza nome e grupo",
+    [created.exercise.name, created.exercise.muscle], ["Rosca Scott", "Bíceps"]);
+  eq("create não muta a lista original", base, []);
+  eq("create devolve nova lista", created.list.length, 1);
+  eq("create preserva espaços internos",
+    CX.create([], { name: "  Rosca   Scott  ", muscle: "Bíceps" }, { groups }).exercise.name,
+    "Rosca   Scott");
+  eq("create rejeita nome acima de 60",
+    CX.create([], { name: "x".repeat(61), muscle: "Peito" }, { groups }).reason, "name-too-long");
+
+  const customDup = CX.create(created.list, { name: "ROSCA SCOTT", muscle: "Bíceps" },
+    { officialNames: official, groups });
+  eq("create bloqueia duplicidade personalizada",
+    [customDup.ok, customDup.reason], [false, "name-duplicate-custom"]);
+  eq("falha preserva a lista", customDup.list.length, 1);
+  eq("create bloqueia duplicidade oficial",
+    CX.create(created.list, { name: "supino reto", muscle: "Peito" },
+      { officialNames: official, groups }).reason,
+    "name-duplicate-official");
+  eq("create bloqueia grupo inválido",
+    CX.create([], { name: "Novo", muscle: "Panturrilha" }, { groups }).reason,
+    "muscle-invalid");
+
+  const existing = [{ id: "cx_dup", name: "Existente", muscle: "Peito" }];
+  let calls = 0;
+  const retry = CX.create(existing, { name: "Novo", muscle: "Peito" }, {
+    groups,
+    idFactory: () => (calls++ === 0 ? "cx_dup" : "cx_ok"),
+  });
+  eq("id colidente é descartado", [retry.ok, retry.exercise.id], [true, "cx_ok"]);
+
+  const auto1 = CX.create([], { name: "A", muscle: "Peito" }, { groups });
+  const auto2 = CX.create(auto1.list, { name: "B", muscle: "Peito" }, { groups });
+  ok("ids gerados são únicos e seguem o padrão",
+    auto1.exercise.id !== auto2.exercise.id && /^cx_/.test(auto2.exercise.id));
+
+  // ── update ────────────────────────────────────────────────────────────
+  const createdId = created.exercise.id;
+  const updated = CX.update(created.list, createdId,
+    { name: "Rosca Direta", muscle: "Bíceps" }, { officialNames: official, groups });
+  ok("update preserva id", updated.ok && updated.exercise.id === createdId);
+  eq("update altera nome", updated.list[0].name, "Rosca Direta");
+  eq("update não muta a lista original", created.list[0].name, "Rosca Scott");
+  eq("update parcial preserva grupo",
+    CX.update(created.list, createdId, { name: "Rosca Direta" }, { groups }).exercise.muscle,
+    "Bíceps");
+  ok("update com o próprio nome é permitido",
+    CX.update(created.list, createdId, { name: "  Rosca Scott  " },
+      { officialNames: official, groups }).ok);
+  eq("update bloqueia nome oficial",
+    CX.update(created.list, createdId, { name: "Supino reto" },
+      { officialNames: official, groups }).reason,
+    "name-duplicate-official");
+
+  const twoCustom = [
+    created.exercise,
+    { id: "cx_outro", name: "Rosca Martelo", muscle: "Bíceps" },
+  ];
+  eq("update bloqueia nome de outro personalizado",
+    CX.update(twoCustom, createdId, { name: "Rosca Martelo" }, { groups }).reason,
+    "name-duplicate-custom");
+  eq("update de id inexistente",
+    CX.update(created.list, "cx_inexistente", { name: "X" }, { groups }).reason,
+    "not-found");
+  eq("update rejeita id inseguro",
+    CX.update(created.list, "cx_');alert(1)//", { name: "X" }, { groups }).reason,
+    "not-found");
+
+  // ── Uso e exclusão ────────────────────────────────────────────────────
+  const list = [
+    { id: "cx_use", name: "Rosca Scott", muscle: "Bíceps" },
+    { id: "cx_free", name: "Rosca Martelo", muscle: "Bíceps" },
+  ];
+  const routines = [
+    { id: "rA", letter: "A", name: "Peito", exercises: [{ catalogId: "cx_use" }] },
+    { id: "rB", letter: "B", name: "Costas", exercises: [{ catalogId: "C-01" }] },
+    { id: "rC", letter: "C", name: "Legado", exercises: [{ id: "cx_use" }] },
+  ];
+  const temp = { id: "rT", letter: "T", name: "Rascunho", exercises: [{ catalogId: "cx_use" }] };
+  const session = { exercises: [{ catalogId: "cx_use" }] };
+
+  const usage = CX.usageReport("cx_use", { routines, tempRoutine: temp, session });
+  eq("usage encontra rotinas (catalogId e legado)",
+    usage.routines.map((r) => r.id), ["rA", "rC"]);
+  ok("usage encontra buffer e sessão",
+    usage.used && usage.tempRoutine.id === "rT" && usage.session);
+  ok("mensagem cita as rotinas",
+    usage.message.indexOf("Peito") !== -1 && usage.message.indexOf("Legado") !== -1);
+  ok("mensagem orienta remover e finalizar",
+    usage.message.indexOf("Remova-o") !== -1 &&
+    usage.message.toLowerCase().indexOf("finalize") !== -1);
+  eq("usedBy é atalho para as rotinas",
+    CX.usedBy(routines, "cx_use").map((r) => r.id), ["rA", "rC"]);
+
+  const sameTemp = { id: "rA", letter: "A", name: "Peito", exercises: [{ catalogId: "cx_use" }] };
+  const usageSame = CX.usageReport("cx_use", { routines, tempRoutine: sameTemp });
+  eq("buffer da mesma rotina não duplica origem",
+    [usageSame.routines.length, usageSame.tempRoutine], [2, null]);
+
+  const usageSession = CX.usageReport("cx_use", { session });
+  ok("sessão isolada bloqueia e orienta",
+    usageSession.used && usageSession.routines.length === 0 && usageSession.session &&
+    usageSession.message.toLowerCase().indexOf("finalize") !== -1);
+
+  const freeUsage = CX.usageReport("cx_free", { routines, tempRoutine: temp, session });
+  ok("usage livre não bloqueia", !freeUsage.used && freeUsage.message === "");
+
+  const blocked = CX.remove(list, "cx_use", { routines, tempRoutine: temp, session });
+  eq("remove bloqueado em uso", [blocked.ok, blocked.reason], [false, "in-use"]);
+  eq("remove bloqueado devolve usage", blocked.usage.routines.length, 2);
+  eq("lista intacta quando bloqueado", blocked.list.length, 2);
+  eq("remove bloqueado apenas pelo buffer",
+    CX.remove(list, "cx_use", { tempRoutine: temp }).reason, "in-use");
+  eq("remove bloqueado apenas pela sessão",
+    CX.remove(list, "cx_use", { session }).reason, "in-use");
+
+  const free = CX.remove(list, "cx_free", { routines, tempRoutine: temp, session });
+  eq("remove livre devolve lista sem o item",
+    [free.ok, free.list.map((e) => e.id)], [true, ["cx_use"]]);
+  eq("lista original intacta após remoção", list.length, 2);
+  eq("remove de id inexistente",
+    CX.remove(list, "cx_nao_existe", {}).reason, "not-found");
+  eq("remove rejeita id inseguro",
+    CX.remove(list, "cx_');alert(1)//", {}).reason, "not-found");
+
+  // ── sanitize ──────────────────────────────────────────────────────────
+  const sanitizeOptions = { groups, officialNames: official };
+  eq("sanitize não-array -> null", CX.sanitize(null, sanitizeOptions), null);
+  eq("sanitize sem grupos -> null (falha fechada)",
+    CX.sanitize([{ id: "cx_x", name: "X", muscle: "Peito" }]), null);
+  eq("sanitize lista vazia -> []", CX.sanitize([], sanitizeOptions), []);
+
+  const raw = [
+    { id: "cx_a", name: "  Supino  ", muscle: "Peito" },
+    { id: "cx_a", name: "Duplicado por id", muscle: "Peito" },
+    { id: "cx_b", name: "supino", muscle: "Peito" },
+    { id: "A-01", name: "Oficial", muscle: "Peito" },
+    { id: "cx_c", name: "   ", muscle: "Peito" },
+    { id: "cx_d", name: "Sem grupo" },
+    { nome: "Sem id", grupoMuscular: "Costas" },
+    { id: "cx_e", nome: "Alias", grupoMuscular: "Costas" },
+    { id: "cx_f", name: "Grupo alternativo", group: "Pernas" },
+    { id: "cx_g", name: "Rosca Teste", muscle: " bíceps " },
+    { id: "cx_oficial", name: "  SUPINO   RETO  ", muscle: "Peito" },
+    { id: "cx_bad_group", name: "Grupo inexistente", muscle: "Grupo Inexistente" },
+    "lixo",
+    null,
+  ];
+  const clean = CX.sanitize(raw, sanitizeOptions);
+  eq("sanitize mantém válidos e únicos",
+    clean.map((e) => e.id), ["cx_a", "cx_e", "cx_f", "cx_g"]);
+  eq("sanitize canonicaliza aliases",
+    [clean[1].name, clean[1].muscle, clean[2].muscle], ["Alias", "Costas", "Pernas"]);
+  eq("sanitize canonicaliza o grupo oficial",
+    [clean[3].muscle], ["Bíceps"]);
+  eq("sanitize rejeita grupo não oficial",
+    CX.sanitize([{ id: "cx_bad", name: "X", muscle: "Grupo Inexistente" }], sanitizeOptions), []);
+  eq("sanitize rejeita duplicidade oficial",
+    CX.sanitize([{ id: "cx_of", name: "  SUPINO   RETO  ", muscle: "Peito" }], sanitizeOptions), []);
+  eq("sanitize rejeita duplicidade oficial ignorando acentos",
+    CX.sanitize([{ id: "cx_of_acc", name: "TRICEPS   POLIA", muscle: "Tríceps" }], sanitizeOptions), []);
+  eq("sanitize rejeita id inseguro",
+    CX.sanitize([{ id: "cx_');alert(1)//", name: "X", muscle: "Peito" }], sanitizeOptions), []);
+  eq("sanitize deduplica caixa/acentos/espaços entre personalizados",
+    CX.sanitize([
+      { id: "cx_acc", name: "Extensão Custom", muscle: "Pernas" },
+      { id: "cx_acc_dup", name: "extensao   custom", muscle: "Pernas" },
+    ], sanitizeOptions).map((e) => e.id), ["cx_acc"]);
+  eq("sanitize trunca nome em 60",
+    CX.sanitize([{ id: "cx_long", name: "x".repeat(70), muscle: "Peito" }], sanitizeOptions)[0].name.length,
+    60);
+  const generated = CX.create([], { name: "Exercício Gerado", muscle: "Peito" }, { groups }).exercise;
+  eq("sanitize preserva id válido gerado pelo sistema",
+    CX.sanitize([generated], sanitizeOptions), [generated]);
+
+  // Relatório explícito usado pela Persistence (A-09).
+  const report = CX.sanitizeWithReport(raw, sanitizeOptions);
+  eq("sanitizeWithReport informa ok e motivo", [report.ok, report.reason], [true, null]);
+  eq("sanitizeWithReport conta descartes", report.discarded, raw.length - 4);
+  eq("sanitizeWithReport conta normalizações", report.normalized, 2);
+  eq("sanitizeWithReport devolve a mesma lista", report.value, clean);
+  const invalidReport = CX.sanitizeWithReport(null, sanitizeOptions);
+  eq("sanitizeWithReport payload inválido",
+    [invalidReport.ok, invalidReport.reason], [false, "invalid-payload"]);
+  const missingGroupsReport = CX.sanitizeWithReport([
+    { id: "cx_x", name: "X", muscle: "Peito" },
+  ]);
+  eq("sanitizeWithReport sem grupos",
+    [missingGroupsReport.ok, missingGroupsReport.reason], [false, "missing-groups"]);
+
+  // ── Protótipo, busca e consulta ───────────────────────────────────────
+  const proto = CX.toPrototype({ id: "cx_a", name: "Supino", muscle: "Peito" },
+    (m) => "img/" + m);
+  eq("toPrototype shape do protótipo", proto, {
+    id: "cx_a", name: "Supino", en: "", muscle: "Peito", subgroup: "",
+    equipment: "Personalizado", img: "img/Peito", custom: true,
+  });
+  eq("toPrototype sem imageOf -> img vazia",
+    CX.toPrototype({ id: "cx_a", name: "X", muscle: "Peito" }).img, "");
+  eq("toPrototype null", CX.toPrototype(null), null);
+  eq("toPrototype rejeita id inseguro",
+    CX.toPrototype({ id: "cx_');alert(1)//", name: "X", muscle: "Peito" }), null);
+
+  const searchList = [
+    { id: "cx_1", name: "Rosca Scott", muscle: "Bíceps" },
+    { id: "cx_2", name: "Supino Inclinado", muscle: "Peito" },
+    { id: "cx_3", name: "Remada Baixa", muscle: "Costas" },
+  ];
+  eq("search sem filtros devolve tudo", CX.search(searchList, "", "all").length, 3);
+  eq("search por termo ignora acentos/caixa",
+    CX.search(searchList, "ROSCA", "all").map((e) => e.id), ["cx_1"]);
+  eq("search por grupo normaliza",
+    CX.search(searchList, "", "biceps").map((e) => e.id), ["cx_1"]);
+  eq("search combina termo e grupo", CX.search(searchList, "supino", "Costas").length, 0);
+  eq("search vazio sem grupo devolve tudo", CX.search(searchList, null, null).length, 3);
+  ok("findById",
+    CX.findById(searchList, "cx_2") === searchList[1] && CX.findById(searchList, "x") === null);
+  eq("findById rejeita id inseguro",
+    CX.findById(searchList, "cx_');alert(1)//"), null);
+
+  // ── Pureza e fallback sem TTUtils ─────────────────────────────────────
+  const source = fs.readFileSync(path.join(ROOT, "js", "custom-exercises.js"), "utf8");
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  ok("módulo puro: sem DOM/storage/estado/Persistence/EventBus",
+    !/\bdocument\b|\blocalStorage\b|\bPersistence\b|\bStorageService\b|\bEventBus\b|\bstate\b/.test(code));
+
+  const sbFallback = makeSandbox();
+  loadModules(sbFallback, ["js/custom-exercises.js"]);
+  const CXFallback = sbFallback.CustomExercises;
+  const fallback = CXFallback.create([], { name: "  Remada  ", muscle: "Costas" },
+    { groups: ["Costas"] });
+  ok("funciona sem TTUtils (fallback próprio)",
+    fallback.ok && fallback.exercise.name === "Remada" && /^cx_/.test(fallback.exercise.id));
+  eq("fallback normaliza acentos em duplicidade",
+    CXFallback.validateName("triceps", { officialNames: ["Tríceps"] }).reason,
+    "name-duplicate-official");
+}
+
+// ---------------------------------------------------------------------------
+// CustomCatalog (Sprint 5.2.1 - oficial -> personalizado -> fallback)
+// ---------------------------------------------------------------------------
+function testCustomCatalog() {
+  const sb = makeSandbox();
+  loadModules(sb, ["js/utils.js", "js/custom-exercises.js", "js/custom-catalog.js"]);
+  const CC = sb.CustomCatalog;
+
+  suite("CustomCatalog (integração de apresentação)");
+
+  ok("expõe CustomCatalog", !!CC && typeof CC.resolve === "function");
+
+  const official = [
+    { id: "C-02", name: "Supino reto", muscle: "Peito" },
+    { id: "C-01", name: "Supino inclinado", muscle: "Peito" },
+  ];
+  const custom = [
+    { id: "cx_1", name: "Supino Inclinado Custom", muscle: "Peito" },
+    { id: "cx_2", name: "Remada Baixa", muscle: "Costas" },
+  ];
+  const imageOf = (muscle) => "img/" + muscle;
+
+  const customItems = CC.items(custom, imageOf);
+  eq("items preserva a ordem personalizada", customItems.map((i) => i.id), ["cx_1", "cx_2"]);
+  ok("items marca custom e resolve a imagem",
+    customItems[0].custom === true && customItems[0].img === "img/Peito" &&
+    customItems[0].equipment === "Personalizado");
+  eq("items lista inválida -> []", CC.items(null, imageOf), []);
+  eq("items item nulo é descartado", CC.items([null], imageOf), []);
+  eq("items descarta id inseguro antes de renderizar",
+    CC.items([{ id: "cx_');alert(1)//", name: "X", muscle: "Peito" }], imageOf), []);
+
+  const fallback = { id: "_missing", name: "Exercício removido" };
+  ok("resolve oficial primeiro",
+    CC.resolve("C-02", official, custom, fallback, imageOf) === official[0]);
+  ok("resolve personalizado quando não há oficial",
+    CC.resolve("cx_1", official, custom, fallback, imageOf).name === "Supino Inclinado Custom");
+  ok("fallback quando o id não existe",
+    CC.resolve("nao-existe", official, custom, fallback, imageOf) === fallback);
+  ok("fallback nulo é permitido", CC.resolve("nao-existe", official, custom, null, imageOf) === null);
+  ok("resolve ignora id inseguro no personalizado",
+    CC.resolve("cx_');alert(1)//", official,
+      [{ id: "cx_');alert(1)//", name: "X", muscle: "Peito" }], fallback, imageOf) === fallback);
+
+  // Colisão hipotética: o oficial vence, sem alterar o catálogo oficial.
+  const collision = [{ id: "cx_colide", name: "Oficial vence", muscle: "Peito" }];
+  const collisionCustom = [{ id: "cx_colide", name: "Personalizado perde", muscle: "Peito" }];
+  eq("colisão de id resolve pelo oficial",
+    CC.resolve("cx_colide", collision, collisionCustom, fallback, imageOf).name,
+    "Oficial vence");
+
+  const merged = CC.search(official, custom, "", "all", imageOf);
+  eq("search devolve oficiais antes dos personalizados",
+    merged.map((i) => i.id), ["C-02", "C-01", "cx_1", "cx_2"]);
+  eq("search filtra personalizados por termo",
+    CC.search([], custom, "remada", "all", imageOf).map((i) => i.id), ["cx_2"]);
+  eq("search combina grupo e termo",
+    CC.search(official, custom, "supino", "Peito", imageOf).map((i) => i.id),
+    ["C-02", "C-01", "cx_1"]);
+  eq("search por grupo sem oficiais no grupo",
+    CC.search([], custom, "", "Costas", imageOf).map((i) => i.id),
+    ["cx_2"]);
+  eq("search sem resultados oficiais mantém personalizados",
+    CC.search([], custom, "rosca", "all", imageOf), []);
+
+  // Degradação segura se o módulo de domínio não estiver carregado.
+  const sbNoDomain = makeSandbox();
+  loadModules(sbNoDomain, ["js/custom-catalog.js"]);
+  const CCFallback = sbNoDomain.CustomCatalog;
+  eq("sem CustomExercises: items -> []", CCFallback.items(custom, imageOf), []);
+  ok("sem CustomExercises: resolve ainda usa oficial/fallback",
+    CCFallback.resolve("C-02", official, custom, fallback, imageOf) === official[0] &&
+    CCFallback.resolve("cx_1", official, custom, fallback, imageOf) === fallback);
+  eq("sem CustomExercises: search só oficiais",
+    CCFallback.search(official, custom, "", "all", imageOf), official);
 }
 
 // ---------------------------------------------------------------------------
@@ -1112,6 +1575,496 @@ function testPersistenceSession() {
   ok("reset limpa rotinas/histórico/PRs/autoRest",
     !S.has("routines") && !S.has("history") && !S.has("prs") && !S.has("autoRest"));
   ok("reset preserva o idioma (contrato existente)", S.load("lang") === "en");
+}
+
+// ---------------------------------------------------------------------------
+// Persistence (exercícios personalizados — Sprint 5.2.1)
+// ---------------------------------------------------------------------------
+function testPersistenceCustomExercises() {
+  const sb = makeSandbox();
+  loadModules(sb, [
+    "js/utils.js", "services/storage.js", "js/i18n.js",
+    "js/data/exercises.js", "js/catalog.js",
+    "js/custom-exercises.js", "js/persistence.js",
+  ]);
+  const P = sb.Persistence;
+  const S = sb.StorageService;
+
+  // Nomes deliberadamente fora do catálogo oficial: a hidratação agora
+  // reaplica a unicidade global e rejeitaria "Rosca scott"/"Supino inclinado".
+  const cxA = { id: "cx_a", name: "Rosca Scott Custom", muscle: "Bíceps" };
+  const cxB = { id: "cx_b", name: "Supino Inclinado Custom", muscle: "Peito" };
+
+  suite("Persistence (exercícios personalizados)");
+
+  eq("schema continua v1", P.SCHEMA_VERSION, 1);
+  eq("chave lógica própria", P.KEYS.customExercises, "customExercises");
+  eq("chave física no namespace", S.key(P.KEYS.customExercises), "tt_ds_v1_customExercises");
+
+  // Chave ausente: primeira visita/legado -> estado intacto.
+  const t0 = { customExercises: ["keep"], routines: [], history: [], lang: "pt", autoRestEnabled: true };
+  const r0 = P.hydrate(t0);
+  eq("chave ausente preserva o estado", t0.customExercises, ["keep"]);
+  ok("chave ausente registrada em skipped", r0.skipped.indexOf("customExercises") !== -1);
+  eq("loadCustomExercises sem chave -> []", P.loadCustomExercises(), []);
+
+  // Round-trip e hidratação.
+  const saved = P.saveCustomExercises([cxA, cxB]);
+  eq("saveCustomExercises grava sem descartes",
+    [saved.ok, saved.status, saved.durable, saved.discarded, saved.normalized],
+    [true, "saved", true, 0, 0]);
+  eq("saveCustomExercises devolve a lista aceita", saved.stored, [cxA, cxB]);
+  eq("gravou na chave física",
+    JSON.parse(sb.localStorage.getItem("tt_ds_v1_customExercises")), [cxA, cxB]);
+  eq("loadCustomExercises round-trip", P.loadCustomExercises(), [cxA, cxB]);
+
+  const t1 = { customExercises: [], routines: [], history: [], lang: "pt", autoRestEnabled: true };
+  const r1 = P.hydrate(t1);
+  eq("hydrate restaura os exercícios personalizados", t1.customExercises, [cxA, cxB]);
+  ok("hydrate registra a restauração", r1.restored.indexOf("customExercises(2)") !== -1,
+    JSON.stringify(r1.restored));
+  eq("hydrate sem descartes não reporta descartes", r1.discarded, []);
+  eq("hydrate sem normalização não reporta normalização", r1.normalized, []);
+
+  // Lista vazia é escolha legítima e não volta ao estado anterior.
+  const emptySaved = P.saveCustomExercises([]);
+  ok("saveCustomExercises aceita lista vazia",
+    emptySaved.ok === true && emptySaved.status === "saved" && emptySaved.stored.length === 0);
+  const t2 = { customExercises: ["keep"] };
+  const r2 = P.hydrate(t2);
+  eq("lista vazia salva é respeitada", t2.customExercises, []);
+  ok("lista vazia restaurada com contador zero", r2.restored.indexOf("customExercises(0)") !== -1);
+
+  // Dados legados/tolerância de aliases + sanitização pelo domínio.
+  S.save("customExercises", [
+    { id: "cx_1", name: "  Rosca Scott Custom  ", muscle: " Bíceps " },
+    { id: "cx_2", nome: "Supino Inclinado Custom", grupoMuscular: "Peito" },
+    { id: "cx_3", name: "Remada Baixa Custom", group: "Costas" },
+    { id: "cx_1", name: "Duplicado por id", muscle: "Peito" },
+    { id: "cx_4", name: "rosca scott custom", muscle: "Bíceps" },
+    { id: "A-01", name: "Oficial", muscle: "Peito" },
+    { id: "cx_5", name: "   ", muscle: "Peito" },
+    { id: "cx_6", name: "Sem grupo" },
+    { nome: "Sem id", grupoMuscular: "Costas" },
+    "lixo",
+    null,
+  ]);
+  const t3 = { customExercises: [] };
+  const r3 = P.hydrate(t3);
+  eq("sanitização mantém apenas registros válidos e únicos",
+    t3.customExercises.map((e) => e.id), ["cx_1", "cx_2", "cx_3"]);
+  eq("aliases legados são canonicalizados", t3.customExercises[1],
+    { id: "cx_2", name: "Supino Inclinado Custom", muscle: "Peito" });
+  eq("grupo alternativo é aceito", t3.customExercises[2],
+    { id: "cx_3", name: "Remada Baixa Custom", muscle: "Costas" });
+  eq("espaços das extremidades são removidos", t3.customExercises[0].name, "Rosca Scott Custom");
+  ok("log reflete apenas os válidos", r3.restored.indexOf("customExercises(3)") !== -1);
+  eq("hydrate explicita os descartes da sanitização", r3.discarded, ["customExercises(8)"]);
+  eq("hydrate explicita as normalizações da sanitização", r3.normalized, ["customExercises(1)"]);
+
+  // A-02/A-03: a hidratação reaplica grupos oficiais e unicidade global.
+  S.save("customExercises", [
+    { id: "cx_ok", name: "  Elevação Lateral Custom  ", muscle: " ombro " },
+    { id: "cx_oficial", name: "  SUPINO   RETO  ", muscle: "Peito" },
+    { id: "cx_bad_group", name: "Grupo inexistente", muscle: "Grupo Inexistente" },
+    { id: "cx_dup_a", name: "Remada Curvada Custom", muscle: "Costas" },
+    { id: "cx_dup_b", name: "remada   curvada custom", muscle: "Costas" },
+    { id: "cx_');alert(1)//", name: "ID inseguro", muscle: "Peito" },
+  ]);
+  const t3b = { customExercises: [] };
+  const r3b = P.hydrate(t3b);
+  eq("hidratação rejeita duplicidade oficial, grupo inválido e id inseguro",
+    t3b.customExercises.map((e) => e.id), ["cx_ok", "cx_dup_a"]);
+  eq("hidratação canonicaliza o grupo oficial",
+    [t3b.customExercises[0].name, t3b.customExercises[0].muscle],
+    ["Elevação Lateral Custom", "Ombro"]);
+  eq("hidratação deduplica personalizados por caixa/acentos/espaços",
+    t3b.customExercises[1].name, "Remada Curvada Custom");
+  ok("log reflete apenas os válidos na hidratação estrita",
+    r3b.restored.indexOf("customExercises(2)") !== -1);
+  eq("hidratação estrita reporta descartes", r3b.discarded, ["customExercises(4)"]);
+  eq("hidratação estrita reporta normalização", r3b.normalized, ["customExercises(1)"]);
+
+  // Nome acima do limite é truncado pelo domínio, não inventado.
+  S.save("customExercises", [{ id: "cx_long", name: "x".repeat(70), muscle: "Peito" }]);
+  const t4 = { customExercises: [] };
+  P.hydrate(t4);
+  eq("nome longo é truncado em 60", t4.customExercises[0].name.length, 60);
+
+  // Lixo total em formato de array -> lista vazia válida (chave presente).
+  S.save("customExercises", ["lixo", null, { id: "A-01", name: "Oficial", muscle: "Peito" }]);
+  const t5 = { customExercises: ["keep"] };
+  P.hydrate(t5);
+  eq("array sem registros válidos hidrata como lista vazia", t5.customExercises, []);
+
+  // Payload que não é array -> chave ignorada, estado preservado.
+  S.save("customExercises", { nao: "array" });
+  const t6 = { customExercises: ["keep"] };
+  const r6 = P.hydrate(t6);
+  eq("payload não-array é ignorado", t6.customExercises, ["keep"]);
+  ok("payload não-array registrado em skipped", r6.skipped.indexOf("customExercises") !== -1);
+  eq("loadCustomExercises de payload inválido -> []", P.loadCustomExercises(), []);
+
+  // JSON corrompido -> a chave existe, mas o conteúdo não é confiável.
+  sb.localStorage.setItem("tt_ds_v1_customExercises", "{isso nao e json");
+  const t7 = { customExercises: ["keep"] };
+  const r7 = P.hydrate(t7);
+  eq("JSON corrompido preserva o estado", t7.customExercises, ["keep"]);
+  ok("JSON corrompido registrado em skipped", r7.skipped.indexOf("customExercises") !== -1);
+  eq("loadCustomExercises de JSON corrompido -> []", P.loadCustomExercises(), []);
+
+  // saveCustomExercises valida antes de gravar e não grava lixo.
+  S.save("customExercises", [cxA]);
+  const invalidPayload = P.saveCustomExercises(null);
+  eq("saveCustomExercises recusa não-array com contrato explícito",
+    [invalidPayload.ok, invalidPayload.status, invalidPayload.stored, invalidPayload.durable],
+    [false, "validation-error", null, false]);
+  eq("payload inválido não sobrescreve o storage", P.loadCustomExercises(), [cxA]);
+  const invalidObject = P.saveCustomExercises({ id: "cx_x" });
+  eq("saveCustomExercises recusa objeto", invalidObject.status, "validation-error");
+  eq("objeto inválido não sobrescreve o storage", P.loadCustomExercises(), [cxA]);
+
+  const partial = P.saveCustomExercises([
+    cxA, { id: "A-01", name: "Oficial", muscle: "Peito" }, null,
+  ]);
+  eq("saveCustomExercises explicita descarte parcial",
+    [partial.ok, partial.status, partial.durable, partial.discarded, partial.normalized],
+    [false, "normalized", true, 2, 0]);
+  eq("somente a lista aceita é devolvida", partial.stored, [cxA]);
+  eq("apenas registros válidos foram gravados", P.loadCustomExercises(), [cxA]);
+
+  const invalidRecords = P.saveCustomExercises([
+    cxA,
+    { id: "cx_of", name: "  SUPINO   RETO  ", muscle: "Peito" },
+    { id: "cx_bad", name: "Grupo inexistente", muscle: "Grupo Inexistente" },
+  ]);
+  eq("saveCustomExercises mantém os válidos e relata os demais",
+    [invalidRecords.status, invalidRecords.discarded, invalidRecords.stored],
+    ["normalized", 2, [cxA]]);
+  eq("apenas o personalizado válido permanece", P.loadCustomExercises(), [cxA]);
+
+  const normalized = P.saveCustomExercises([
+    { id: "cx_norm", name: "  Rosca Teste  ", muscle: " bíceps " },
+  ]);
+  eq("normalização sem descarte é distinguida",
+    [normalized.ok, normalized.status, normalized.durable, normalized.discarded, normalized.normalized],
+    [false, "normalized", true, 0, 1]);
+  eq("lista normalizada é a aceita pelo storage",
+    P.loadCustomExercises(), [{ id: "cx_norm", name: "Rosca Teste", muscle: "Bíceps" }]);
+
+  // Nenhum registro válido em um array com conteúdo não pode apagar o que já
+  // estava persistido: falha de validação, sem update destrutivo.
+  S.save("customExercises", [cxA]);
+  const allInvalid = P.saveCustomExercises([
+    { id: "A-01", name: "Oficial", muscle: "Peito" }, null, "lixo",
+  ]);
+  eq("array só com registros inválidos é falha de validação",
+    [allInvalid.ok, allInvalid.status, allInvalid.stored, allInvalid.discarded],
+    [false, "validation-error", null, 3]);
+  eq("registros válidos existentes são preservados", P.loadCustomExercises(), [cxA]);
+
+  // saveAll inclui a chave; reset limpa sem tocar no idioma.
+  const allState = {
+    routines: [], prs: [], history: [], customExercises: [cxB], lang: "pt", autoRestEnabled: true,
+  };
+  const allSaved = P.saveAll(allState);
+  eq("saveAll bem-sucedido devolve contrato completo",
+    [allSaved.ok, allSaved.status, allSaved.durable, allSaved.attempted],
+    [true, "saved", true, 6]);
+  eq("saveAll lista as chaves duráveis",
+    allSaved.saved, ["routines", "customExercises", "history", "prs", "lang", "autoRest"]);
+  eq("saveAll não lista falhas", [allSaved.normalized, allSaved.failed, allSaved.memory], [[], [], []]);
+  ok("saveAll grava customExercises", S.has(P.KEYS.customExercises));
+  eq("saveAll conteúdo persistido", P.loadCustomExercises(), [cxB]);
+  ok("saveLang antes do reset", P.saveLang("en") === true);
+  ok("reset executa", P.reset() === true);
+  ok("reset limpa customExercises", !S.has(P.KEYS.customExercises) && P.loadCustomExercises().length === 0);
+  eq("reset preserva o idioma", S.load("lang"), "en");
+
+  // Falha de gravação com storage ativo: false, sem lançar.
+  const sbQuota = makeSandbox();
+  const setItemOriginal = sbQuota.localStorage.setItem.bind(sbQuota.localStorage);
+  sbQuota.localStorage.setItem = (k, v) => {
+    if (String(v).length > 10) throw new Error("QuotaExceededError");
+    return setItemOriginal(k, v);
+  };
+  loadModules(sbQuota, [
+    "js/utils.js", "services/storage.js", "js/i18n.js",
+    "js/data/exercises.js", "js/catalog.js",
+    "js/custom-exercises.js", "js/persistence.js",
+  ]);
+  const Pq = sbQuota.Persistence;
+  ok("storage ativo com falha simulada", Pq.isEnabled() === true);
+  const quota = Pq.saveCustomExercises([cxA]);
+  eq("falha de gravação é storage-error, não sucesso",
+    [quota.ok, quota.status, quota.durable, quota.stored],
+    [false, "storage-error", false, null]);
+  eq("falha de gravação não cria cópia divergente na memória", Pq.loadCustomExercises(), []);
+
+  // Storage indisponível: modo memória, sem lançar e com leitura funcional.
+  const sbMem = makeSandbox();
+  delete sbMem.localStorage;
+  loadModules(sbMem, [
+    "js/utils.js", "services/storage.js", "js/i18n.js",
+    "js/data/exercises.js", "js/catalog.js",
+    "js/custom-exercises.js", "js/persistence.js",
+  ]);
+  const Pm = sbMem.Persistence;
+  ok("modo memória: isEnabled false", Pm.isEnabled() === false);
+  const memory = Pm.saveCustomExercises([cxA]);
+  eq("modo memória é explícito e não durável",
+    [memory.ok, memory.status, memory.durable, memory.stored],
+    [false, "memory", false, [cxA]]);
+  eq("modo memória: leitura continua funcionando", Pm.loadCustomExercises(), [cxA]);
+  const tm = { customExercises: [] };
+  Pm.hydrate(tm);
+  eq("modo memória: hydrate restaura da memória", tm.customExercises, [cxA]);
+
+  // Sem o módulo de domínio, a Persistence degrada com segurança.
+  const sbNoCx = makeSandbox();
+  loadModules(sbNoCx, ["js/utils.js", "services/storage.js", "js/i18n.js", "js/persistence.js"]);
+  const Pn = sbNoCx.Persistence;
+  const Sn = sbNoCx.StorageService;
+  const noDomain = Pn.saveCustomExercises([cxA]);
+  eq("sem CustomExercises: saveCustomExercises recusa com contrato explícito",
+    [noDomain.ok, noDomain.status, noDomain.reason], [false, "validation-error", "unavailable"]);
+  Sn.save("customExercises", [cxA]);
+  const tn = { customExercises: ["keep"] };
+  const rn = Pn.hydrate(tn);
+  eq("sem CustomExercises: hydrate preserva o estado", tn.customExercises, ["keep"]);
+  ok("sem CustomExercises: chave registrada em skipped",
+    rn.skipped.indexOf("customExercises") !== -1);
+  eq("sem CustomExercises: load devolve []", Pn.loadCustomExercises(), []);
+
+  // Sem catálogo oficial carregado, a sanitização falha fechada e não aceita
+  // dados sem validar grupos/nomes. A ordem real da aplicação carrega o
+  // catálogo antes da Persistence; este teste protege a degradação segura.
+  const sbNoCatalog = makeSandbox();
+  loadModules(sbNoCatalog, [
+    "js/utils.js", "services/storage.js", "js/i18n.js",
+    "js/custom-exercises.js", "js/persistence.js",
+  ]);
+  const Pc = sbNoCatalog.Persistence;
+  const Sc = sbNoCatalog.StorageService;
+  Sc.save("customExercises", [cxA]);
+  const noCatalog = Pc.saveCustomExercises([cxA]);
+  eq("sem catálogo: saveCustomExercises recusa com contrato explícito",
+    [noCatalog.ok, noCatalog.status, noCatalog.reason],
+    [false, "validation-error", "unavailable"]);
+  const tc = { customExercises: ["keep"] };
+  const rc = Pc.hydrate(tc);
+  eq("sem catálogo: hydrate preserva o estado", tc.customExercises, ["keep"]);
+  ok("sem catálogo: chave registrada em skipped",
+    rc.skipped.indexOf("customExercises") !== -1);
+}
+
+// ---------------------------------------------------------------------------
+// Persistence.saveAll — contrato de resultado (A-06)
+// ---------------------------------------------------------------------------
+function testPersistenceSaveAll() {
+  const modules = [
+    "js/utils.js", "services/storage.js", "js/i18n.js",
+    "js/data/exercises.js", "js/catalog.js",
+    "js/custom-exercises.js", "js/workout-session.js", "js/persistence.js",
+  ];
+  const make = () => {
+    const sb = makeSandbox();
+    loadModules(sb, modules);
+    return sb;
+  };
+  const cx = { id: "cx_save_all", name: "Rosca Save All", muscle: "Bíceps" };
+  const target = {
+    routines: [], prs: [], history: [], customExercises: [cx], lang: "pt", autoRestEnabled: true,
+  };
+  const countersCoherent = (r) =>
+    r.attempted === r.saved.length + r.normalized.length + r.failed.length + r.memory.length;
+
+  suite("Persistence (saveAll A-06)");
+
+  const sbOk = make();
+  const allOk = sbOk.Persistence.saveAll(target);
+  eq("saveAll: todas as gravações duráveis",
+    [allOk.ok, allOk.status, allOk.durable, allOk.attempted],
+    [true, "saved", true, 6]);
+  eq("saveAll: nenhuma falha quando tudo grava",
+    [allOk.normalized, allOk.failed, allOk.memory], [[], [], []]);
+  eq("saveAll: lista as chaves duráveis, incluindo prs",
+    allOk.saved, ["routines", "customExercises", "history", "prs", "lang", "autoRest"]);
+  ok("saveAll: contadores coerentes no sucesso", countersCoherent(allOk));
+  ok("saveAll: session ausente não é tentada", !("session" in allOk.results));
+
+  const invalid = sbOk.Persistence.saveAll(null);
+  eq("saveAll: alvo inválido é falha de validação",
+    [invalid.ok, invalid.status, invalid.attempted, invalid.durable],
+    [false, "validation-error", 0, false]);
+
+  // Backend ativo, mas todas as gravações reais falham (quota/erro no setItem).
+  const sbFail = makeSandbox();
+  const failSetItem = sbFail.localStorage.setItem.bind(sbFail.localStorage);
+  sbFail.localStorage.setItem = (key, value) => {
+    if (key === "tt_ds_v1___probe__") return failSetItem(key, value);
+    throw new Error("QuotaExceededError");
+  };
+  loadModules(sbFail, modules);
+  const Pf = sbFail.Persistence;
+  ok("saveAll: storage ativo com falha simulada", Pf.isEnabled() === true);
+  const allFailed = Pf.saveAll(target);
+  eq("saveAll: falha total não é sucesso",
+    [allFailed.ok, allFailed.status, allFailed.durable, allFailed.attempted],
+    [false, "failed", false, 6]);
+  eq("saveAll: falha total lista todas as chaves", allFailed.failed.length, 6);
+  eq("saveAll: customExercises relata storage-error",
+    [allFailed.results.customExercises.status, allFailed.results.customExercises.ok],
+    ["storage-error", false]);
+  ok("saveAll: contadores coerentes na falha total", countersCoherent(allFailed));
+  eq("saveAll: falha total não cria cópia em memória",
+    [sbFail.StorageService.has("routines"), sbFail.StorageService.load("routines", null)],
+    [false, null]);
+
+  // Falha apenas em routines: deve ser parcial, nunca sucesso.
+  const sbPartial = makeSandbox();
+  const partialSetItem = sbPartial.localStorage.setItem.bind(sbPartial.localStorage);
+  sbPartial.localStorage.setItem = (key, value) => {
+    if (key === "tt_ds_v1_routines") throw new Error("QuotaExceededError");
+    return partialSetItem(key, value);
+  };
+  loadModules(sbPartial, modules);
+  const Pp = sbPartial.Persistence;
+  const partial = Pp.saveAll(target);
+  eq("saveAll: falha parcial é explicitada",
+    [partial.ok, partial.status, partial.durable, partial.failed],
+    [false, "partial", false, ["routines"]]);
+  eq("saveAll: as demais chaves continuam duráveis",
+    partial.saved, ["customExercises", "history", "prs", "lang", "autoRest"]);
+  eq("saveAll: rotina com falha de quota relata storage-error",
+    partial.results.routines.status, "storage-error");
+  eq("saveAll: falha de quota não deixa cópia em memória",
+    [sbPartial.StorageService.has("routines"), sbPartial.StorageService.load("routines", null)],
+    [false, null]);
+  ok("saveAll: contadores coerentes na falha parcial", countersCoherent(partial));
+
+  // Modo memória: nenhuma gravação é durável.
+  const sbMemory = makeSandbox();
+  delete sbMemory.localStorage;
+  loadModules(sbMemory, modules);
+  const Pm = sbMemory.Persistence;
+  const memory = Pm.saveAll(target);
+  eq("saveAll: modo memória não é sucesso durável",
+    [memory.ok, memory.status, memory.durable, memory.saved],
+    [false, "memory", false, []]);
+  eq("saveAll: modo memória lista as chaves em memória",
+    memory.memory, ["routines", "customExercises", "history", "prs", "lang", "autoRest"]);
+  eq("saveAll: customExercises em modo memória",
+    memory.results.customExercises.status, "memory");
+  ok("saveAll: contadores coerentes no modo memória", countersCoherent(memory));
+
+  // Normalização/descarte em customExercises não pode virar "saved".
+  const sbNormalized = make();
+  const normalized = sbNormalized.Persistence.saveAll({
+    routines: [], prs: [], history: [], customExercises: [cx, null], lang: "pt", autoRestEnabled: true,
+  });
+  eq("saveAll: descarte/normalização é distinguido de sucesso",
+    [normalized.ok, normalized.status, normalized.durable],
+    [false, "normalized", true]);
+  eq("saveAll: chave normalizada é listada",
+    normalized.normalized, ["customExercises"]);
+  eq("saveAll: as demais chaves continuam salvas",
+    normalized.saved, ["routines", "history", "prs", "lang", "autoRest"]);
+  ok("saveAll: contadores coerentes na normalização", countersCoherent(normalized));
+
+  // A-06/A: exercício inválido em rotina não pode ser reportado como "saved".
+  const sbRoutineDrop = make();
+  const routineDrop = sbRoutineDrop.Persistence.saveAll({
+    routines: [{
+      id: "rA", letter: "A", name: "Peito",
+      exercises: [
+        { catalogId: "ex1", sets: 3, reps: 10, weight: 10, rest: 60 },
+        { sets: 4, reps: 8 },
+      ],
+    }],
+    prs: [], history: [], customExercises: [], lang: "pt", autoRestEnabled: true,
+  });
+  eq("saveAll: rotina com exercício descartado não é sucesso integral",
+    [routineDrop.ok, routineDrop.status, routineDrop.durable],
+    [false, "normalized", true]);
+  ok("saveAll: rotina normalizada é listada", routineDrop.normalized.indexOf("routines") !== -1);
+  eq("saveAll: contador de descartes da rotina",
+    routineDrop.results.routines.discarded, 1);
+  eq("saveAll: rotina gravada mantém apenas o exercício válido",
+    sbRoutineDrop.StorageService.load("routines", null)[0].exercises.length, 1);
+  ok("saveAll: contadores coerentes no descarte de rotina", countersCoherent(routineDrop));
+
+  // A-06/A: normalização de campos (defaults/coerção) também é distinguida.
+  const sbRoutineNorm = make();
+  const routineNorm = sbRoutineNorm.Persistence.saveAll({
+    routines: [{
+      id: "rA", letter: "A", name: "Peito",
+      exercises: [{ catalogId: "ex1", sets: 3, reps: 10 }],
+    }],
+    prs: [], history: [], customExercises: [], lang: "pt", autoRestEnabled: true,
+  });
+  eq("saveAll: rotina normalizada (defaults) não é sucesso integral",
+    [routineNorm.ok, routineNorm.status], [false, "normalized"]);
+  ok("saveAll: normalização da rotina é contabilizada",
+    routineNorm.results.routines.normalized >= 1);
+
+  // A-06/B: locale inválido em modo memória não pode aparecer como memória.
+  const sbLangMemory = makeSandbox();
+  delete sbLangMemory.localStorage;
+  loadModules(sbLangMemory, modules);
+  const langMemory = sbLangMemory.Persistence.saveAll({
+    routines: [], prs: [], history: [], customExercises: [],
+    lang: "klingon", autoRestEnabled: true,
+  });
+  eq("saveAll: locale inválido em memória não é contabilizado como memória",
+    langMemory.memory.indexOf("lang"), -1);
+  ok("saveAll: locale inválido é falha explícita",
+    langMemory.failed.indexOf("lang") !== -1);
+  eq("saveAll: locale inválido mantém o status de validação",
+    langMemory.results.lang.status, "validation-error");
+  eq("saveAll: status agregado com falha em memória",
+    [langMemory.ok, langMemory.status, langMemory.durable], [false, "partial", false]);
+  ok("saveAll: contadores coerentes com locale inválido", countersCoherent(langMemory));
+
+  // A-06/D: prs e session pertencem ao contrato e são gravados de fato.
+  const sbKeys = make();
+  const session = sbKeys.WorkoutSession.create({
+    id: "rA", letter: "A", name: "Peito",
+    exercises: [{ catalogId: "ex1", sets: 3, reps: 10, weight: 10, rest: 60 }],
+  });
+  const withKeys = sbKeys.Persistence.saveAll({
+    routines: [], prs: [{
+      id: "ex1_carga", exerciseKey: "ex1", exerciseName: "Supino", type: "carga",
+      value: 100, oldValue: 90, diff: 10, workoutId: 1,
+      workoutDate: "2026-10-23", createdAt: "2026-10-23T00:00:00.000Z",
+    }],
+    history: [], customExercises: [], lang: "pt", autoRestEnabled: true, session,
+  });
+  eq("saveAll: inclui prs e session no total tentado",
+    [withKeys.attempted, withKeys.status], [7, "saved"]);
+  ok("saveAll: prs e session são duráveis",
+    withKeys.saved.indexOf("prs") !== -1 && withKeys.saved.indexOf("session") !== -1);
+  eq("saveAll: sessão é gravada na chave própria",
+    !!sbKeys.StorageService.load("session", null), true);
+  eq("saveAll: PR é gravado na chave própria",
+    sbKeys.StorageService.load("prs", null).length, 1);
+  ok("saveAll: contadores coerentes com prs e session", countersCoherent(withKeys));
+
+  // Sem StorageService não há gravação nem fallback: estado explícito.
+  const sbNoStorage = makeSandbox();
+  loadModules(sbNoStorage, [
+    "js/utils.js", "js/i18n.js", "js/data/exercises.js", "js/catalog.js",
+    "js/custom-exercises.js", "js/persistence.js",
+  ]);
+  const Pns = sbNoStorage.Persistence;
+  const noStorage = Pns.saveAll(target);
+  eq("saveAll: sem StorageService é unavailable",
+    [noStorage.ok, noStorage.status, noStorage.durable, noStorage.attempted, noStorage.reason],
+    [false, "unavailable", false, 0, "unavailable"]);
+  const noStorageCustom = Pns.saveCustomExercises([cx]);
+  eq("saveCustomExercises: sem StorageService é unavailable",
+    [noStorageCustom.ok, noStorageCustom.status, noStorageCustom.reason],
+    [false, "unavailable", "unavailable"]);
 }
 
 // ---------------------------------------------------------------------------
@@ -2087,7 +3040,7 @@ function testWiring() {
 
   const html = fs.readFileSync(path.join(ROOT, "TreinoTracker_DeepSeek.html"), "utf8");
 
-  const order = ["js/utils.js", "services/storage.js", "js/i18n.js", "js/data/exercises.js", "js/catalog.js", "js/events.js", "js/routine-actions.js", "js/pr.js", "js/workout-session.js", "js/rest-timer.js", "js/wake-lock.js", "js/action-guard.js", "js/workout-controller.js"].map((src) => ({
+  const order = ["js/utils.js", "services/storage.js", "js/i18n.js", "js/data/exercises.js", "js/catalog.js", "js/custom-exercises.js", "js/custom-catalog.js", "js/events.js", "js/routine-actions.js", "js/pr.js", "js/workout-session.js", "js/rest-timer.js", "js/wake-lock.js", "js/action-guard.js", "js/workout-controller.js"].map((src) => ({
     src,
     at: html.indexOf('src="' + src + '"'),
   }));
@@ -2198,6 +3151,164 @@ function testWiring() {
     !/<script|<link/i.test(homeBlock));
   ok("Home não referencia nenhum módulo novo (sem I18n./Persistence. no markup)",
     !/I18n\.|Persistence\.|StorageService\.|TTUtils\./.test(homeBlock));
+
+  // Sprint 5.2.1 — exercícios personalizados no catálogo apresentado.
+  ok("estado inicia com a lista de personalizados",
+    /customExercises:\s*\[\]/.test(html));
+  ok("personalizados carregam antes da persistência e do script principal",
+    html.indexOf('src="js/custom-exercises.js"') !== -1 &&
+      html.indexOf('src="js/custom-catalog.js"') !== -1 &&
+      html.indexOf('src="js/custom-exercises.js"') < html.indexOf('src="js/custom-catalog.js"') &&
+      html.indexOf('src="js/custom-catalog.js"') < html.indexOf('src="js/persistence.js"') &&
+      html.indexOf('src="js/custom-catalog.js"') < html.indexOf("<script>\n    // ================= CATÁLOGO REAL"));
+  ok("seleção combina oficiais + personalizados pelo adaptador",
+    html.includes("CustomCatalog.search(official, state.customExercises") &&
+      html.includes("state.catalogFilter, catalogImage"));
+  ok("resolução de catalogId usa oficial -> personalizado -> fallback",
+    /function catalogItem\(id\)[\s\S]{0,320}?CustomCatalog\.resolve\(id, mockCatalog, state\.customExercises,\s*FALLBACK_CATALOG_ITEM, catalogImage\)/.test(html));
+  ok("personalizado é identificado pelo selo traduzível",
+    html.includes('class="custom-badge"') && html.includes('data-i18n="custom_badge"'));
+  ok("botão 'Novo exercício' na seleção abre a tela dedicada",
+    html.includes('id="btn-new-custom-exercise"') &&
+      html.includes("openCustomExerciseCreate('add-exercise')"));
+  ok("tela do formulário tem rótulos, limite de 60 e grupo obrigatório",
+    html.includes('id="screen-add-custom-exercise"') &&
+      html.includes('for="custom-exercise-name"') &&
+      html.includes('id="custom-exercise-name"') &&
+      html.includes('maxlength="60"') &&
+      html.includes('for="custom-exercise-muscle"') &&
+      html.includes('id="custom-exercise-muscle"') &&
+      /<select id="custom-exercise-muscle"[^>]*required/.test(html));
+  ok("erro do cadastro é uma região viva assertiva",
+    /<div id="custom-exercise-error"[^>]*role="alert"[^>]*aria-live="assertive"/.test(html));
+  ok("formulário usa submit nativo e limpa erro ao editar",
+    html.includes("customForm.addEventListener('submit'") &&
+      html.includes("customName.addEventListener('input', clearCustomExerciseError)") &&
+      html.includes("customMuscle.addEventListener('change', clearCustomExerciseError)"));
+  ok("gravação acontece antes de atualizar o estado",
+    /Persistence\.saveCustomExercises\(result\.list\);[\s\S]{0,520}?state\.customExercises\s*=\s*customExerciseAcceptedList\(saveResult, result\.list\)/.test(html) &&
+      !/Persistence\.saveCustomExercises\(result\.list\);[\s\S]{0,520}?state\.customExercises\s*=\s*result\.list/.test(html));
+  ok("falha de gravação mantém o formulário intacto e não atualiza estado",
+    /Persistence\.saveCustomExercises\(result\.list\);[\s\S]{0,320}?saveStatus !== 'saved'[\s\S]{0,120}?setCustomExerciseError\('save-error', false\);\s*return false;/.test(html));
+  ok("A-09: descarte e modo memória não exibem toast de sucesso",
+    html.includes("saveStatus === 'normalized'") &&
+      html.includes("showToast(I18n.t('custom_exercise_partial_save'), 'error')") &&
+      html.includes("showToast(I18n.t('custom_exercise_memory_only'), 'error')") &&
+      html.includes("customExerciseAcceptedList"));
+  ok("duplicidade global usa catálogo oficial + grupos oficiais",
+    html.includes("officialNames: officialNames") && html.includes("groups: groups") &&
+      html.includes("CustomExercises.create("));
+
+  // Sprint 5.2.1 — Fase 4: gerenciar (editar/excluir) personalizados.
+  ok("tela 'Meus exercícios' com título, subtítulo, erro e lista acessíveis",
+    html.includes('id="screen-custom-exercises"') &&
+      html.includes('aria-labelledby="custom-exercises-title"') &&
+      html.includes('id="custom-exercises-title"') &&
+      html.includes('id="custom-exercises-error"') &&
+      /<div id="custom-exercises-error"[^>]*role="alert"[^>]*aria-live="assertive"/.test(html) &&
+      /<div id="custom-exercises-list"[^>]*role="list"/.test(html));
+  ok("A-07: estado vazio é região de status fora da lista e sem item fictício",
+    /<div id="custom-exercises-list"[^>]*role="list"><\/div>\s*<p id="custom-exercises-empty"[^>]*role="status"[^>]*hidden><\/p>/.test(html) &&
+      !/<p class="custom-manage-empty" role="status">/.test(html) &&
+      html.includes("function setCustomExercisesEmptyState(message)") &&
+      html.includes("if (empty.textContent !== text) empty.textContent = text;") &&
+      html.includes("container.innerHTML = '';") &&
+      html.includes("setCustomExercisesEmptyState(I18n.t('custom_exercises_empty'))") &&
+      html.includes("setCustomExercisesEmptyState('')"));
+  ok("A-08: {name} é interpolado por função, sem interpretar $&, $', $` ou $$",
+    html.includes("function interpolateName(template, name)") &&
+      html.includes(".replace('{name}', () => String(name == null ? '' : name))") &&
+      html.includes("interpolateName(I18n.t('add_exercise_aria'), c.name)") &&
+      html.includes("interpolateName(I18n.t('custom_error_in_use'), customExercisesErrorName)") &&
+      html.includes("interpolateName(I18n.t('edit_custom_exercise_aria'), ex.name)") &&
+      html.includes("interpolateName(I18n.t('delete_custom_exercise_aria'), ex.name)") &&
+      html.includes("interpolateName(I18n.t('delete_custom_exercise_desc'), exercise.name)") &&
+      !/\.replace\('\{name\}',\s*[A-Za-z_$]/.test(html));
+  ok("seleção abre o gerenciador e a rota existe",
+    html.includes('id="btn-manage-custom-exercises"') &&
+      html.includes("openCustomExerciseManager()") &&
+      html.includes("'custom-exercises': 1") &&
+      html.includes("if (screenId === 'custom-exercises') renderCustomExercisesScreen();"));
+  ok("formulário alterna criação e edição (título, botão e retorno)",
+    html.includes("state.editingCustomExerciseId") &&
+      html.includes("state.customExerciseReturnScreen") &&
+      html.includes("function openCustomExerciseCreate(") &&
+      html.includes("function openCustomExerciseEdit(") &&
+      html.includes("function closeCustomExerciseForm(") &&
+      html.includes("syncCustomExerciseFormMode()") &&
+      html.includes("edit_exercise_title") && html.includes("save_exercise"));
+  ok("edição usa o domínio com validação global e grava antes do estado",
+    /CustomExercises\.update\(state\.customExercises, state\.editingCustomExerciseId, payload,/.test(html) &&
+      /CustomExercises\.update\([\s\S]{0,200}?officialNames: officialNames, groups: groups/.test(html));
+  ok("lista de personalizados expõe editar/excluir com nomes acessíveis",
+    html.includes('class="btn custom-manage-edit"') &&
+      html.includes('class="btn custom-manage-delete"') &&
+      html.includes("edit_custom_exercise_aria") &&
+      html.includes("delete_custom_exercise_aria") &&
+      html.includes('data-custom-action="edit"') &&
+      html.includes('data-custom-action="delete"'));
+  ok("A-01: IDs personalizados não são interpolados em onclick inline",
+    !/onclick="[^"]*addExerciseToRoutine/.test(html) &&
+      !/onclick="[^"]*openCustomExerciseEdit/.test(html) &&
+      !/onclick="[^"]*askDeleteCustomExercise/.test(html) &&
+      html.includes('data-catalog-id="${catalogText(c.id)}"') &&
+      html.includes('data-custom-id="${catalogText(ex.id)}"') &&
+      html.includes("closest('.btn-add-circle')") &&
+      html.includes("closest('[data-custom-action]')") &&
+      html.includes("addEventListener('click'"));
+  ok("exclusão bloqueia uso e consulta rotinas, buffer e sessão",
+    html.includes("CustomExercises.usageReport(id, customExerciseUsageOptions())") &&
+      /routines: Array\.isArray\(state\.routines\) \? state\.routines : \[\]/.test(html) &&
+      html.includes("tempRoutine: state.tempEditRoutine || null") &&
+      html.includes("session: state.session || null"));
+  ok("exclusão grava antes de atualizar estado e preserva em falha",
+    /CustomExercises\.remove\(state\.customExercises, id, customExerciseUsageOptions\(\)\)/.test(html) &&
+      /Persistence\.saveCustomExercises\(result\.list\);[\s\S]{0,420}?state\.customExercises = customExerciseAcceptedList\(saveResult, result\.list\)/.test(html) &&
+      /setCustomExercisesScreenError\('delete-error'\);\s*return false;/.test(html));
+  ok("modal de confirmação é diálogo com foco inicial e fallback programático",
+    html.includes('id="confirm-modal" role="dialog" aria-modal="true"') &&
+      html.includes('aria-labelledby="confirm-title" aria-describedby="confirm-desc" tabindex="-1"') &&
+      html.includes("_confirmReturnFocus = isUsableFocusTarget(document.activeElement)") &&
+      html.includes("const cancel = document.getElementById('confirm-cancel')") &&
+      html.includes("const initial = focusables.indexOf(cancel) !== -1 ? cancel : (focusables[0] || modal)") &&
+      html.includes("if (initial && typeof initial.focus === 'function') initial.focus()"));
+  ok("A-04: conteúdo do modal fica contido por Tab/Shift+Tab",
+    html.includes("function confirmModalTrapKeydown(e)") &&
+      html.includes("const items = modalFocusables(modal)") &&
+      html.includes("if (!items.length)") &&
+      html.includes("active === last") && html.includes("active === first") &&
+      html.includes("first.focus()") && html.includes("last.focus()"));
+  ok("A-04: Escape respeita modal não descartável e não fecha duas camadas",
+    html.includes("if (e.key === 'Escape')") &&
+      html.includes("if (e.defaultPrevented) return") &&
+      html.includes("if (_confirmDismissible) closeConfirmModal()") &&
+      html.includes("stopImmediatePropagation()"));
+  ok("A-04: fundo recebe inert e estado anterior é restaurado",
+    html.includes("function setModalBackgroundInert(modal, inert)") &&
+      html.includes("hasAttribute('inert')") &&
+      html.includes("setAttribute('inert'") &&
+      html.includes("removeAttribute('inert')") &&
+      html.includes("setModalBackgroundInert(modal, true)") &&
+      html.includes("setModalBackgroundInert(modal, false)") &&
+      html.includes("releaseConfirmFocusTrap()"));
+  ok("A-05: cadastro/edição lembram o acionador e restauram foco válido",
+    html.includes("let customExerciseReturnFocus = null") &&
+      html.includes("function rememberCustomExerciseFocus()") &&
+      html.includes("function restoreCustomExerciseFocus(targetScreen)") &&
+      html.includes("customExerciseReturnFocus = isUsableFocusTarget(active) ? active : null") &&
+      html.includes("isUsableFocusTarget(opener)") &&
+      html.includes("focusCustomExercisesTitle()") &&
+      html.includes("focusFallbackForScreen()"));
+  ok("A-05: voltar do gerenciador devolve o foco ao acionador",
+    html.includes("let customExerciseManagerReturnFocus = null") &&
+      html.includes("function closeCustomExerciseManager()") &&
+      html.includes("customExerciseManagerReturnFocus = isUsableFocusTarget(active) ? active : null") &&
+      html.includes('onclick="closeCustomExerciseManager()"') &&
+      /function closeCustomExerciseManager\(\)[\s\S]{0,700}?isUsableFocusTarget\(opener\)/.test(html) &&
+      /function closeCustomExerciseManager\(\)[\s\S]{0,1000}?focusFallbackForScreen\(\)/.test(html));
+  ok("botões do modal de confirmação são traduzíveis",
+    html.includes('id="confirm-ok" data-i18n="confirm"') &&
+      html.includes('id="confirm-cancel" data-i18n="cancel"'));
 }
 
 // ---------------------------------------------------------------------------
@@ -3031,10 +4142,14 @@ function testRoutinePersistence() {
   testPersistence();
   testPersistence2C();
   testCatalog();
+  testCustomExercises();
+  testCustomCatalog();
   testPR();
   testRoutineActions();
   testWorkoutSession();
   testPersistenceSession();
+  testPersistenceCustomExercises();
+  testPersistenceSaveAll();
   testRestTimer();
   await testWakeLock();
   testWorkoutController();

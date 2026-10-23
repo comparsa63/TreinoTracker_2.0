@@ -267,6 +267,71 @@
             font-size: 1.5rem; font-weight: 600; cursor: pointer;
         }
 
+        /* ================= SPRINT 5.2.1: EXERCÍCIO PERSONALIZADO ================= */
+        .new-exercise-btn {
+            width: 100%; margin-bottom: 16px;
+            border: 1px dashed var(--text-muted); background: transparent;
+        }
+        .custom-badge {
+            display: inline-block; margin-left: 6px; padding: 2px 7px;
+            border-radius: 999px; background: rgba(0, 255, 85, 0.12);
+            color: var(--primary); font-size: 0.65rem; font-weight: 700;
+            letter-spacing: 0.02em; vertical-align: middle;
+        }
+        .custom-exercise-form { display: flex; flex-direction: column; gap: 20px; }
+        .form-field { display: flex; flex-direction: column; gap: 8px; }
+        .form-field label { color: var(--text-muted); font-weight: 600; }
+        .form-field input,
+        .form-field select {
+            width: 100%; min-height: 48px;
+            background: var(--card-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--border-radius-sm);
+            color: var(--text-main);
+            font-family: var(--font-family);
+            font-size: 1rem;
+            padding: 12px 14px;
+        }
+        .form-field input::placeholder { color: var(--text-muted); }
+        .form-field [aria-invalid="true"] { border-color: var(--danger); }
+        .form-field select option { background: var(--card-bg); color: var(--text-main); }
+        .field-help { color: var(--text-muted); font-size: 0.8rem; }
+        .form-error {
+            display: none; color: var(--danger);
+            background: rgba(255, 68, 68, 0.1);
+            border: 1px solid rgba(255, 68, 68, 0.35);
+            border-radius: var(--border-radius-sm);
+            padding: 12px 14px; font-size: 0.9rem; line-height: 1.4;
+        }
+        .form-error.show { display: block; }
+        .custom-exercise-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+        .custom-exercise-entry-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+        .custom-exercise-entry-actions .new-exercise-btn {
+            flex: 1 1 140px; width: auto; margin-bottom: 0; min-height: 44px;
+        }
+        .custom-manage-list { display: flex; flex-direction: column; gap: 12px; }
+        .custom-manage-item {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+            background: var(--card-bg); border-radius: var(--border-radius-sm);
+            padding: 12px;
+        }
+        .custom-manage-item img {
+            width: 50px; height: 50px; border-radius: 8px; object-fit: cover;
+        }
+        .custom-manage-item .info { flex: 1; min-width: 0; }
+        .custom-manage-item .info h4 { font-size: 0.95rem; overflow-wrap: anywhere; }
+        .custom-manage-item .info p { font-size: 0.75rem; color: var(--text-muted); }
+        .custom-manage-actions { display: flex; gap: 8px; width: 100%; }
+        .custom-manage-actions .btn { flex: 1; min-height: 44px; }
+        .custom-manage-empty { color: var(--text-muted); text-align: center; margin-top: 24px; }
+        #btn-new-custom-exercise:focus-visible,
+        #btn-manage-custom-exercises:focus-visible,
+        #btn-manage-new-custom-exercise:focus-visible,
+        #screen-add-custom-exercise :focus-visible,
+        #screen-custom-exercises :focus-visible {
+            outline: 2px solid var(--primary); outline-offset: 2px;
+        }
+
         /* ================= TELA 6: CONFIGURAR EXERCÍCIO ================= */
         .config-form { display: flex; flex-direction: column; gap: 16px; }
         .config-group {
@@ -554,8 +619,63 @@
             </div>
         </div>
         <input type="text" class="search-bar" placeholder="Buscar exercício..." data-i18n="search_placeholder" id="search-catalog">
+        <div class="custom-exercise-entry-actions">
+            <button class="btn new-exercise-btn" id="btn-new-custom-exercise" onclick="openCustomExerciseCreate('add-exercise')">
+                + <span data-i18n="new_exercise">Novo exercício</span>
+            </button>
+            <button class="btn new-exercise-btn" id="btn-manage-custom-exercises" onclick="openCustomExerciseManager()">
+                <span data-i18n="manage_custom_exercises">Meus exercícios</span>
+            </button>
+        </div>
         <div class="filters" id="catalog-filters"></div>
         <div id="catalog-container"></div>
+    </section>
+
+    <!-- ================= TELA 5.0: MEUS EXERCÍCIOS PERSONALIZADOS ================= -->
+    <section id="screen-custom-exercises" class="screen" aria-labelledby="custom-exercises-title">
+        <div class="header-nav">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <button class="btn btn-icon" onclick="closeCustomExerciseManager()" data-i18n-aria-label="back" aria-label="Voltar">←</button>
+                <h2 id="custom-exercises-title" tabindex="-1" data-i18n="custom_exercises_title">Meus exercícios</h2>
+            </div>
+        </div>
+        <p class="text-muted" style="margin-bottom: 16px;" data-i18n="custom_exercises_sub">Exercícios criados por você.</p>
+        <button class="btn new-exercise-btn" id="btn-manage-new-custom-exercise" onclick="openCustomExerciseCreate('custom-exercises')">
+            + <span data-i18n="new_exercise">Novo exercício</span>
+        </button>
+        <div id="custom-exercises-error" class="form-error" role="alert" aria-live="assertive" tabindex="-1"></div>
+        <div id="custom-exercises-list" class="custom-manage-list" role="list"></div>
+        <p id="custom-exercises-empty" class="custom-manage-empty" role="status" hidden></p>
+    </section>
+
+    <!-- ================= TELA 5.1: NOVO/EDITAR EXERCÍCIO PERSONALIZADO ================= -->
+    <section id="screen-add-custom-exercise" class="screen" aria-labelledby="custom-exercise-title">
+        <div class="header-nav">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <button class="btn btn-icon" onclick="closeCustomExerciseForm()" data-i18n-aria-label="back" aria-label="Voltar">←</button>
+                <h2 id="custom-exercise-title" data-i18n="new_exercise_title">Novo exercício</h2>
+            </div>
+        </div>
+        <form id="custom-exercise-form" class="custom-exercise-form" novalidate>
+            <div class="form-field">
+                <label for="custom-exercise-name" data-i18n="exercise_name">Nome do exercício</label>
+                <input type="text" id="custom-exercise-name" name="name" maxlength="60" autocomplete="off" required
+                       aria-describedby="custom-exercise-name-help custom-exercise-error"
+                       placeholder="Ex.: Rosca Scott">
+                <p id="custom-exercise-name-help" class="field-help" data-i18n="exercise_name_help">Máximo de 60 caracteres.</p>
+            </div>
+            <div class="form-field">
+                <label for="custom-exercise-muscle" data-i18n="muscle_group">Grupo muscular</label>
+                <select id="custom-exercise-muscle" name="muscle" required aria-describedby="custom-exercise-error">
+                    <option value="" data-i18n="muscle_group_placeholder">Selecione o grupo</option>
+                </select>
+            </div>
+            <div id="custom-exercise-error" class="form-error" role="alert" aria-live="assertive" tabindex="-1"></div>
+            <div class="custom-exercise-actions">
+                <button type="submit" class="btn btn-primary" id="btn-save-custom-exercise" data-i18n="create_exercise">Criar exercício</button>
+                <button type="button" class="btn" onclick="closeCustomExerciseForm()" data-i18n="cancel">Cancelar</button>
+            </div>
+        </form>
     </section>
 
     <!-- ================= TELA 6: CONFIGURAR EXERCÍCIO ================= -->
@@ -772,13 +892,13 @@
     </div>
 
     <!-- MODAL DE CONFIRMAÇÃO (genérico — Fase 2C) -->
-    <div class="modal-overlay" id="confirm-modal">
+    <div class="modal-overlay" id="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-desc" tabindex="-1">
         <div class="modal-content">
             <h3 id="confirm-title">Confirmar</h3>
             <p id="confirm-desc"></p>
             <div class="modal-actions">
-                <button class="btn btn-primary" id="confirm-ok">Confirmar</button>
-                <button class="btn" id="confirm-cancel">Cancelar</button>
+                <button class="btn btn-primary" id="confirm-ok" data-i18n="confirm">Confirmar</button>
+                <button class="btn" id="confirm-cancel" data-i18n="cancel">Cancelar</button>
             </div>
         </div>
     </div>
@@ -824,6 +944,8 @@
 <script src="js/i18n.js"></script>
 <script src="js/data/exercises.js"></script>
 <script src="js/catalog.js"></script>
+<script src="js/custom-exercises.js"></script>
+<script src="js/custom-catalog.js"></script>
 <script src="js/events.js"></script>
 <script src="js/routine-actions.js"></script>
 <script src="js/pr.js"></script>
@@ -851,8 +973,40 @@
         img: (typeof Catalog !== 'undefined' ? Catalog.FALLBACK_IMAGE : 'assets/images/quadriceps.jpg')
     };
 
+    /** Imagem do grupo para os itens personalizados (fallback local). */
+    function catalogImage(muscle) {
+        if (typeof Catalog !== 'undefined' && typeof Catalog.muscleImage === 'function') {
+            return Catalog.muscleImage(muscle) || FALLBACK_CATALOG_ITEM.img;
+        }
+        return FALLBACK_CATALOG_ITEM.img;
+    }
+
+    /**
+     * Resolve um catalogId na ordem oficial -> personalizado -> fallback.
+     * O catálogo oficial permanece separado; o adaptador só compõe a tela.
+     */
     function catalogItem(id) {
+        if (typeof CustomCatalog !== 'undefined') {
+            return CustomCatalog.resolve(id, mockCatalog, state.customExercises,
+                FALLBACK_CATALOG_ITEM, catalogImage);
+        }
         return mockCatalog.find(c => c.id === id) || FALLBACK_CATALOG_ITEM;
+    }
+
+    /** Texto de catálogo sempre escapado (nomes personalizados são do usuário). */
+    function catalogText(value) {
+        return (typeof TTUtils !== 'undefined' && TTUtils.escapeHtml)
+            ? TTUtils.escapeHtml(value)
+            : String(value == null ? '' : value);
+    }
+
+    /**
+     * Insere o nome literalmente em um template traduzido. Usar uma função de
+     * substituição impede que `$&`, `$'`, `$`` e `$$` no nome sejam
+     * interpretados como instruções pelo motor de `String.replace` (A-08).
+     */
+    function interpolateName(template, name) {
+        return String(template).replace('{name}', () => String(name == null ? '' : name));
     }
 
     const initialRoutines = [
@@ -876,6 +1030,12 @@
         lang: 'pt',
         currentScreen: 'home',
         routines: JSON.parse(JSON.stringify(initialRoutines)),
+        // Sprint 5.2.1: lista de exercícios personalizados. Hidratada pela
+        // Persistence antes do DOMContentLoaded; nunca altera o catálogo oficial.
+        customExercises: [],
+        // Gerenciamento (Fase 4): modo do formulário e tela de retorno.
+        editingCustomExerciseId: null,
+        customExerciseReturnScreen: 'add-exercise',
         editingRoutineId: null,
         tempEditRoutine: null,
         configExerciseIndex: null,
@@ -899,6 +1059,20 @@
     // vinculada não pode ser excluída.
     let sessionPendingDecision = false;
 
+    // Sprint 5.2.1: motivo do último erro do formulário de exercício. Fica só
+    // em memória (não é dado persistido) e permite re-traduzir a mensagem
+    // quando o idioma muda, sem apagar o que o usuário digitou.
+    let customExerciseErrorReason = null;
+    let customExercisesErrorReason = null;
+    let customExercisesErrorName = '';
+    // A-05: acionador da tela de cadastro/edição para devolver o foco ao
+    // cancelar, voltar ou concluir a operação.
+    let customExerciseReturnFocus = null;
+    // A-05: acionador da tela "Meus exercícios". Fica separado do formulário
+    // porque o gerenciador pode abrir o cadastro no meio do caminho e o
+    // retorno do gerenciador ainda precisa devolver o foco ao botão original.
+    let customExerciseManagerReturnFocus = null;
+
     // ================= DICIONÁRIO DE TRADUÇÕES =================
     // Movido para js/i18n.js (fonte única: pt/en/es). Mantemos aqui a mesma
     // referência `translations[locale][key]` para não alterar nenhum consumidor.
@@ -913,7 +1087,7 @@
         document.getElementById(`screen-${screenId}`).classList.add('active');
         
         document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-        const navMap = { 'home': 0, 'workouts': 1, 'details': 1, 'edit': 1, 'add-exercise': 1, 'config-exercise': 1, 'prep': 1, 'history': 2 };
+        const navMap = { 'home': 0, 'workouts': 1, 'details': 1, 'edit': 1, 'add-exercise': 1, 'custom-exercises': 1, 'add-custom-exercise': 1, 'config-exercise': 1, 'prep': 1, 'history': 2 };
         if (navMap[screenId] !== undefined) {
             document.querySelectorAll('.nav-item')[navMap[screenId]].classList.add('active');
         }
@@ -935,6 +1109,8 @@
             else showEditScreen();
         }
         if (screenId === 'add-exercise') renderCatalog();
+        if (screenId === 'custom-exercises') renderCustomExercisesScreen();
+        if (screenId === 'add-custom-exercise') renderCustomExerciseForm();
         if (screenId === 'config-exercise') renderConfigExercise(param);
         if (screenId === 'prep') renderPrep();
         if (screenId === 'history') renderHistory();
@@ -947,6 +1123,54 @@
     function toggleLanguage() {
         I18n.toggle(); // pt <-> en: troca, aplica nos [data-i18n] e persiste a escolha
         navigate(state.currentScreen);
+    }
+
+    /**
+     * Um destino de foco só é válido se ainda estiver conectado, visível e
+     * realmente focável. Evita devolver o foco para telas ocultas, elementos
+     * removidos por renderização ou controles desabilitados (A-05).
+     */
+    function isUsableFocusTarget(el) {
+        if (!el || el === document.body || el === document.documentElement) return false;
+        if (!el.isConnected || typeof el.focus !== 'function') return false;
+        if (el.hasAttribute('disabled') || el.getAttribute('aria-hidden') === 'true') return false;
+        if (el.closest && el.closest('[inert]')) return false;
+        return typeof el.getClientRects !== 'function' || el.getClientRects().length > 0;
+    }
+
+    /**
+     * Destino lógico quando o acionador original não existe mais. Prioriza o
+     * título programável da tela ativa e, na ausência dele, o primeiro controle
+     * focável visível. Nunca foca o body.
+     */
+    function focusFallbackForScreen() {
+        const screen = document.getElementById('screen-' + state.currentScreen);
+        if (!screen) return false;
+
+        // Prioridade explícita: título programável e, depois, alvo marcado.
+        // querySelectorAll sozinho devolveria o botão "Voltar" do cabeçalho
+        // antes do título, o que tornaria o retorno menos previsível.
+        let preferred = screen.querySelector('h2[tabindex="-1"]');
+        if (!isUsableFocusTarget(preferred)) {
+            preferred = screen.querySelector('[data-focus-fallback]');
+        }
+        if (isUsableFocusTarget(preferred)) {
+            preferred.focus();
+            return true;
+        }
+
+        const candidates = screen.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), ' +
+            'select:not([disabled]), textarea:not([disabled]), ' +
+            '[tabindex]:not([tabindex="-1"])'
+        );
+        for (let i = 0; i < candidates.length; i++) {
+            if (isUsableFocusTarget(candidates[i])) {
+                candidates[i].focus();
+                return true;
+            }
+        }
+        return false;
     }
 
     // ================= LÓGICA: ROTINAS E EDIÇÃO =================
@@ -994,9 +1218,9 @@
             return `
                 <div class="exercise-list-item">
                     <div style="font-weight: 700; color: var(--text-muted); width: 20px;">${idx + 1}</div>
-                    <img src="${cat.img}">
+                    <img src="${catalogText(cat.img)}" alt="">
                     <div class="info">
-                        <h4>${cat.name}</h4>
+                        <h4>${catalogText(cat.name)}</h4>
                         <p>${ex.sets} séries • ${ex.reps} reps • ${ex.weight} kg</p>
                     </div>
                 </div>
@@ -1047,9 +1271,9 @@
             const cat = catalogItem(ex.catalogId);
             return `
                 <div class="exercise-list-item">
-                    <img src="${cat.img}">
+                    <img src="${catalogText(cat.img)}" alt="">
                     <div class="info" onclick="navigate('config-exercise', ${idx})">
-                        <h4>${cat.name}</h4>
+                        <h4>${catalogText(cat.name)}</h4>
                         <p>${ex.sets} séries • ${ex.reps} reps • ${ex.weight} kg</p>
                     </div>
                     <div class="edit-controls">
@@ -1120,21 +1344,31 @@
         const container = document.getElementById('catalog-container');
         const query = document.getElementById('search-catalog').value || '';
 
-        const filtered = (typeof Catalog !== 'undefined')
+        const official = (typeof Catalog !== 'undefined')
             ? Catalog.search(query, state.catalogFilter)
             : mockCatalog.filter(c => {
                 const matchQuery = c.name.toLowerCase().includes(query.toLowerCase());
                 const matchFilter = state.catalogFilter === 'all' || c.muscle === state.catalogFilter;
                 return matchQuery && matchFilter;
             });
+        // Oficiais primeiro; personalizados depois; ambos no mesmo filtro/busca.
+        const filtered = (typeof CustomCatalog !== 'undefined')
+            ? CustomCatalog.search(official, state.customExercises, query, state.catalogFilter, catalogImage)
+            : official;
 
-        container.innerHTML = filtered.map(c => `
-            <div class="catalog-item">
-                <img src="${c.img}">
-                <div class="info"><h4>${c.name}</h4><p>${muscleLabel(c)}</p></div>
-                <button class="btn-add-circle" onclick="addExerciseToRoutine('${c.id}')">+</button>
-            </div>
-        `).join('');
+        container.innerHTML = filtered.map(c => {
+            const badge = c.custom
+                ? `<span class="custom-badge" data-i18n="custom_badge">${catalogText(I18n.t('custom_badge'))}</span>`
+                : '';
+            const addLabel = catalogText(interpolateName(I18n.t('add_exercise_aria'), c.name));
+            return `
+                <div class="catalog-item${c.custom ? ' catalog-item-custom' : ''}">
+                    <img src="${catalogText(c.img)}" alt="">
+                    <div class="info"><h4>${catalogText(c.name)}${badge}</h4><p>${catalogText(muscleLabel(c))}</p></div>
+                    <button type="button" class="btn-add-circle" aria-label="${addLabel}" data-catalog-id="${catalogText(c.id)}">+</button>
+                </div>
+            `;
+        }).join('');
     }
 
     function filterCatalog(muscle) {
@@ -1147,6 +1381,500 @@
             catalogId: catalogId, sets: 3, reps: 10, weight: 20, rest: 60
         });
         navigate('edit');
+    }
+
+    // ================= SPRINT 5.2.1: NOVO EXERCÍCIO PERSONALIZADO =================
+
+    /** Mensagem localizada para um motivo do domínio/gravação. */
+    function customExerciseMessage(reason) {
+        const keys = {
+            'name-required': 'custom_error_name_required',
+            'name-too-long': 'custom_error_name_too_long',
+            'name-duplicate-official': 'custom_error_name_duplicate_official',
+            'name-duplicate-custom': 'custom_error_name_duplicate_custom',
+            'muscle-required': 'custom_error_muscle_required',
+            'muscle-invalid': 'custom_error_muscle_invalid',
+            'save-error': 'custom_exercise_save_error',
+            'unavailable': 'custom_exercise_unavailable',
+            'not-found': 'custom_error_not_found'
+        };
+        return I18n.t(keys[reason] || 'custom_exercise_unavailable');
+    }
+
+    function customExerciseErrorField(reason) {
+        if (!reason) return null;
+        if (reason.indexOf('name-') === 0) return 'name';
+        if (reason.indexOf('muscle-') === 0) return 'muscle';
+        return null;
+    }
+
+    /** Normaliza o contrato de gravação (objeto novo ou booleano legado). */
+    function customExerciseSaveStatus(saveResult) {
+        if (saveResult === true) return 'saved';
+        if (!saveResult || typeof saveResult !== 'object') return 'failed';
+        if (typeof saveResult.status === 'string') return saveResult.status;
+        return saveResult.ok === true ? 'saved' : 'failed';
+    }
+
+    /** Lista efetivamente aceita pelo armazenamento, com fallback compatível. */
+    function customExerciseAcceptedList(saveResult, fallback) {
+        if (saveResult && Array.isArray(saveResult.stored)) return saveResult.stored;
+        return fallback;
+    }
+
+    /** Mostra/limpa o alerta e marca o campo inválido (aria-invalid). */
+    function setCustomExerciseError(reason, focusField) {
+        customExerciseErrorReason = reason || null;
+        const box = document.getElementById('custom-exercise-error');
+        const name = document.getElementById('custom-exercise-name');
+        const muscle = document.getElementById('custom-exercise-muscle');
+
+        if (box) {
+            box.innerText = reason ? customExerciseMessage(reason) : '';
+            box.classList.toggle('show', !!reason);
+        }
+
+        const field = customExerciseErrorField(reason);
+        if (name) name.setAttribute('aria-invalid', field === 'name' ? 'true' : 'false');
+        if (muscle) muscle.setAttribute('aria-invalid', field === 'muscle' ? 'true' : 'false');
+
+        if (focusField && field) {
+            const target = field === 'name' ? name : muscle;
+            if (target) target.focus();
+        }
+    }
+
+    function fillCustomExerciseGroups(selected) {
+        const select = document.getElementById('custom-exercise-muscle');
+        if (!select) return;
+        const groups = (typeof Catalog !== 'undefined') ? Catalog.groups() : [];
+        select.innerHTML = '<option value="">' + catalogText(I18n.t('muscle_group_placeholder')) + '</option>' +
+            groups.map(g => `<option value="${catalogText(g)}">${catalogText(g)}</option>`).join('');
+        if (selected && groups.indexOf(selected) !== -1) select.value = selected;
+    }
+
+    /** Exercício personalizado em edição (ou null quando é criação). */
+    function customExerciseBeingEdited() {
+        if (!state.editingCustomExerciseId) return null;
+        return (typeof CustomExercises !== 'undefined' && typeof CustomExercises.findById === 'function')
+            ? CustomExercises.findById(state.customExercises, state.editingCustomExerciseId)
+            : null;
+    }
+
+    /** Título e botão do formulário refletem criação x edição. */
+    function syncCustomExerciseFormMode() {
+        const editing = !!state.editingCustomExerciseId;
+        const title = document.getElementById('custom-exercise-title');
+        const save = document.getElementById('btn-save-custom-exercise');
+        if (title) {
+            const key = editing ? 'edit_exercise_title' : 'new_exercise_title';
+            title.setAttribute('data-i18n', key);
+            title.innerText = I18n.t(key);
+        }
+        if (save) {
+            const key = editing ? 'save_exercise' : 'create_exercise';
+            save.setAttribute('data-i18n', key);
+            save.innerText = I18n.t(key);
+        }
+    }
+
+    /** Abre o formulário limpo, com os grupos oficiais e foco no nome. */
+    function renderCustomExerciseForm() {
+        const name = document.getElementById('custom-exercise-name');
+        const select = document.getElementById('custom-exercise-muscle');
+        if (!name || !select) return;
+
+        const editing = customExerciseBeingEdited();
+        if (state.editingCustomExerciseId && !editing) {
+            state.editingCustomExerciseId = null;
+            state.customExerciseReturnScreen = 'custom-exercises';
+            customExerciseReturnFocus = null;
+            setCustomExercisesScreenError('not-found');
+            navigate('custom-exercises');
+            focusCustomExercisesTitle();
+            return;
+        }
+
+        setCustomExerciseError(null);
+        name.value = editing ? editing.name : '';
+        fillCustomExerciseGroups(editing ? editing.muscle : '');
+        name.placeholder = I18n.t('exercise_name_placeholder');
+        syncCustomExerciseFormMode();
+        name.focus();
+    }
+
+    /** Mantém placeholder/opções/mensagem no idioma ativo sem apagar a entrada. */
+    function refreshCustomExerciseTranslations() {
+        const name = document.getElementById('custom-exercise-name');
+        const select = document.getElementById('custom-exercise-muscle');
+        if (!name || !select) return;
+        name.placeholder = I18n.t('exercise_name_placeholder');
+        fillCustomExerciseGroups(select.value);
+        syncCustomExerciseFormMode();
+        if (customExerciseErrorReason) {
+            const box = document.getElementById('custom-exercise-error');
+            if (box) box.innerText = customExerciseMessage(customExerciseErrorReason);
+        }
+    }
+
+    function clearCustomExerciseError() {
+        if (customExerciseErrorReason) setCustomExerciseError(null);
+    }
+
+    // ----- Gerenciamento (Fase 4): lista, edição e exclusão -----
+
+    function focusCustomExercisesTitle() {
+        const title = document.getElementById('custom-exercises-title');
+        if (title && typeof title.focus === 'function') title.focus();
+    }
+
+    /** Guarda o acionador antes de sair da tela; ele pode ser removido no retorno. */
+    function rememberCustomExerciseFocus() {
+        const active = document.activeElement;
+        customExerciseReturnFocus = isUsableFocusTarget(active) ? active : null;
+    }
+
+    /**
+     * Devolve o foco ao acionador quando ele ainda é válido. Se a renderização
+     * da lista o removeu, usa o título da listagem ou o botão de criação como
+     * destino lógico. O roteador não disputa o foco: quem chama decide o alvo.
+     */
+    function restoreCustomExerciseFocus(targetScreen) {
+        const opener = customExerciseReturnFocus;
+        customExerciseReturnFocus = null;
+        if (isUsableFocusTarget(opener)) {
+            opener.focus();
+            return true;
+        }
+        if (targetScreen === 'custom-exercises') {
+            focusCustomExercisesTitle();
+            return true;
+        }
+        const newButton = document.getElementById('btn-new-custom-exercise');
+        if (isUsableFocusTarget(newButton)) {
+            newButton.focus();
+            return true;
+        }
+        return focusFallbackForScreen();
+    }
+
+    /** Abre o formulário em modo criação, lembrando de qual tela voltar. */
+    function openCustomExerciseCreate(returnScreen) {
+        rememberCustomExerciseFocus();
+        state.editingCustomExerciseId = null;
+        state.customExerciseReturnScreen = returnScreen === 'custom-exercises' ? 'custom-exercises' : 'add-exercise';
+        clearCustomExercisesScreenError();
+        navigate('add-custom-exercise');
+    }
+
+    /** Abre o formulário em modo edição do personalizado informado. */
+    function openCustomExerciseEdit(id) {
+        rememberCustomExerciseFocus();
+        state.editingCustomExerciseId = id || null;
+        state.customExerciseReturnScreen = 'custom-exercises';
+        clearCustomExercisesScreenError();
+        navigate('add-custom-exercise');
+    }
+
+    /** Abre a tela “Meus exercícios” e posiciona o foco no título. */
+    function openCustomExerciseManager() {
+        const active = document.activeElement;
+        customExerciseManagerReturnFocus = isUsableFocusTarget(active) ? active : null;
+        clearCustomExercisesScreenError();
+        navigate('custom-exercises');
+        focusCustomExercisesTitle();
+    }
+
+    /**
+     * Volta do gerenciador para a seleção de exercícios devolvendo o foco ao
+     * botão que abriu a tela. Se ele não existir mais (ou não puder receber
+     * foco), usa os mesmos fallbacks acessíveis do restante do fluxo.
+     */
+    function closeCustomExerciseManager() {
+        const opener = customExerciseManagerReturnFocus;
+        customExerciseManagerReturnFocus = null;
+        navigate('add-exercise');
+        if (isUsableFocusTarget(opener)) {
+            opener.focus();
+            return true;
+        }
+        const manageButton = document.getElementById('btn-manage-custom-exercises');
+        if (isUsableFocusTarget(manageButton)) {
+            manageButton.focus();
+            return true;
+        }
+        const newButton = document.getElementById('btn-new-custom-exercise');
+        if (isUsableFocusTarget(newButton)) {
+            newButton.focus();
+            return true;
+        }
+        return focusFallbackForScreen();
+    }
+
+    /** Sai do formulário voltando para a tela de origem (seleção ou lista). */
+    function closeCustomExerciseForm() {
+        const target = state.customExerciseReturnScreen === 'custom-exercises' ? 'custom-exercises' : 'add-exercise';
+        state.editingCustomExerciseId = null;
+        state.customExerciseReturnScreen = 'add-exercise';
+        navigate(target);
+        restoreCustomExerciseFocus(target);
+    }
+
+    function setCustomExercisesScreenError(reason, exerciseName, focus) {
+        customExercisesErrorReason = reason || null;
+        customExercisesErrorName = exerciseName || '';
+        const box = document.getElementById('custom-exercises-error');
+        if (!box) return;
+
+        let message = '';
+        if (reason === 'in-use') {
+            message = interpolateName(I18n.t('custom_error_in_use'), customExercisesErrorName);
+        } else if (reason === 'not-found') {
+            message = I18n.t('custom_error_not_found');
+        } else if (reason === 'delete-error') {
+            message = I18n.t('custom_exercise_delete_error');
+        }
+
+        box.innerText = message;
+        box.classList.toggle('show', !!message);
+        if (message && focus !== false) box.focus();
+    }
+
+    function clearCustomExercisesScreenError() {
+        customExercisesErrorReason = null;
+        customExercisesErrorName = '';
+        const box = document.getElementById('custom-exercises-error');
+        if (!box) return;
+        box.innerText = '';
+        box.classList.remove('show');
+    }
+
+    /**
+     * A-07: o estado vazio é uma região de status FORA da lista. Assim a lista
+     * mantém apenas itens reais e a mensagem não vira um item fictício.
+     * Só atualiza o texto quando ele muda para não repetir o anúncio.
+     */
+    function setCustomExercisesEmptyState(message) {
+        const empty = document.getElementById('custom-exercises-empty');
+        if (!empty) return;
+        const text = message ? String(message) : '';
+        if (empty.textContent !== text) empty.textContent = text;
+        empty.hidden = !text;
+    }
+
+    /** Desenha a lista de personalizados com ações acessíveis. */
+    function renderCustomExercisesScreen() {
+        const container = document.getElementById('custom-exercises-list');
+        if (!container) return;
+        const items = (Array.isArray(state.customExercises) ? state.customExercises : [])
+            .filter((ex) => ex && typeof CustomExercises !== 'undefined' &&
+                typeof CustomExercises.isValidId === 'function' && CustomExercises.isValidId(ex.id));
+
+        if (!items.length) {
+            container.innerHTML = '';
+            setCustomExercisesEmptyState(I18n.t('custom_exercises_empty'));
+            return;
+        }
+
+        container.innerHTML = items.map((ex) => {
+            const name = catalogText(ex.name);
+            const muscle = catalogText(ex.muscle);
+            const editLabel = catalogText(interpolateName(I18n.t('edit_custom_exercise_aria'), ex.name));
+            const deleteLabel = catalogText(interpolateName(I18n.t('delete_custom_exercise_aria'), ex.name));
+            const badge = '<span class="custom-badge" data-i18n="custom_badge">' +
+                catalogText(I18n.t('custom_badge')) + '</span>';
+            return `
+                <div class="custom-manage-item" role="listitem" data-custom-id="${catalogText(ex.id)}">
+                    <img src="${catalogText(catalogImage(ex.muscle))}" alt="">
+                    <div class="info"><h4>${name}${badge}</h4><p>${muscle}</p></div>
+                    <div class="custom-manage-actions">
+                        <button type="button" class="btn custom-manage-edit" data-custom-id="${catalogText(ex.id)}"
+                                data-custom-action="edit"
+                                aria-label="${editLabel}" data-i18n="edit">${catalogText(I18n.t('edit'))}</button>
+                        <button type="button" class="btn custom-manage-delete" data-custom-id="${catalogText(ex.id)}"
+                                data-custom-action="delete"
+                                aria-label="${deleteLabel}" data-i18n="delete">${catalogText(I18n.t('delete'))}</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        setCustomExercisesEmptyState('');
+    }
+
+    /** Redesenha a lista no idioma ativo quando a tela está aberta. */
+    function refreshCustomExercisesManagementTranslations() {
+        if (state.currentScreen !== 'custom-exercises') return;
+        renderCustomExercisesScreen();
+        if (customExercisesErrorReason) {
+            setCustomExercisesScreenError(customExercisesErrorReason, customExercisesErrorName, false);
+        }
+    }
+
+    function customExerciseUsageOptions() {
+        return {
+            routines: Array.isArray(state.routines) ? state.routines : [],
+            tempRoutine: state.tempEditRoutine || null,
+            session: state.session || null
+        };
+    }
+
+    function customExerciseById(id) {
+        return (typeof CustomExercises !== 'undefined' && typeof CustomExercises.findById === 'function')
+            ? CustomExercises.findById(state.customExercises, id)
+            : null;
+    }
+
+    /** Pré-checa o uso e só então pede confirmação para excluir. */
+    function askDeleteCustomExercise(id) {
+        clearCustomExercisesScreenError();
+        const exercise = customExerciseById(id);
+        if (!exercise) {
+            setCustomExercisesScreenError('not-found');
+            return;
+        }
+        if (typeof CustomExercises === 'undefined' || typeof CustomExercises.usageReport !== 'function') {
+            setCustomExercisesScreenError('delete-error');
+            return;
+        }
+
+        const usage = CustomExercises.usageReport(id, customExerciseUsageOptions());
+        if (usage && usage.used) {
+            setCustomExercisesScreenError('in-use', exercise.name);
+            return;
+        }
+
+        showConfirm(
+            I18n.t('delete_custom_exercise_title'),
+            interpolateName(I18n.t('delete_custom_exercise_desc'), exercise.name),
+            () => deleteCustomExercise(id)
+        );
+    }
+
+    /**
+     * Exclui com bloqueio de uso: revalida no domínio, grava antes de atualizar
+     * o estado e, em falha, preserva a lista e anuncia o motivo.
+     */
+    function deleteCustomExercise(id) {
+        clearCustomExercisesScreenError();
+        const exercise = customExerciseById(id);
+        if (!exercise) {
+            setCustomExercisesScreenError('not-found');
+            return false;
+        }
+        if (typeof CustomExercises === 'undefined' || typeof CustomExercises.remove !== 'function') {
+            setCustomExercisesScreenError('delete-error');
+            return false;
+        }
+
+        const result = CustomExercises.remove(state.customExercises, id, customExerciseUsageOptions());
+        if (!result.ok) {
+            const reason = result.reason === 'in-use' ? 'in-use'
+                : (result.reason === 'not-found' ? 'not-found' : 'delete-error');
+            setCustomExercisesScreenError(reason, exercise.name);
+            return false;
+        }
+
+        // Persistir ANTES de atualizar o estado ou confirmar sucesso.
+        if (typeof Persistence === 'undefined' ||
+            typeof Persistence.saveCustomExercises !== 'function') {
+            setCustomExercisesScreenError('delete-error');
+            return false;
+        }
+
+        const saveResult = Persistence.saveCustomExercises(result.list);
+        const saveStatus = customExerciseSaveStatus(saveResult);
+        if (saveStatus !== 'saved' && saveStatus !== 'normalized' && saveStatus !== 'memory') {
+            setCustomExercisesScreenError('delete-error');
+            return false;
+        }
+
+        // A lista aceita pelo armazenamento é a fonte da verdade do estado.
+        state.customExercises = customExerciseAcceptedList(saveResult, result.list);
+        if (state.editingCustomExerciseId === id) {
+            state.editingCustomExerciseId = null;
+            state.customExerciseReturnScreen = 'custom-exercises';
+        }
+        if (saveStatus === 'saved') {
+            showToast(I18n.t('custom_exercise_deleted'), 'success');
+        } else if (saveStatus === 'normalized') {
+            showToast(I18n.t('custom_exercise_partial_save'), 'error');
+        } else {
+            showToast(I18n.t('custom_exercise_memory_only'), 'error');
+        }
+        renderCustomExercisesScreen();
+        const newBtn = document.getElementById('btn-manage-new-custom-exercise');
+        if (newBtn) newBtn.focus();
+        return true;
+    }
+
+    /**
+     * Cria ou edita o exercício: valida no DOMÍNIO (nome, grupo e duplicidade
+     * global), grava primeiro e só então atualiza o estado. Em falha, o
+     * formulário fica intacto e o motivo é anunciado na região viva.
+     */
+    function createCustomExercise() {
+        const nameInput = document.getElementById('custom-exercise-name');
+        const muscleInput = document.getElementById('custom-exercise-muscle');
+        if (!nameInput || !muscleInput) return false;
+
+        const isEditing = !!state.editingCustomExerciseId;
+        const canCreate = typeof CustomExercises !== 'undefined' && typeof CustomExercises.create === 'function';
+        const canUpdate = typeof CustomExercises !== 'undefined' && typeof CustomExercises.update === 'function';
+        if (!canCreate || (isEditing && !canUpdate)) {
+            setCustomExerciseError('unavailable', false);
+            return false;
+        }
+
+        const officialNames = (typeof Catalog !== 'undefined' && typeof Catalog.all === 'function')
+            ? Catalog.all() : [];
+        const groups = (typeof Catalog !== 'undefined' && typeof Catalog.groups === 'function')
+            ? Catalog.groups() : [];
+        const payload = { name: nameInput.value, muscle: muscleInput.value };
+        const result = isEditing
+            ? CustomExercises.update(state.customExercises, state.editingCustomExerciseId, payload,
+                { officialNames: officialNames, groups: groups })
+            : CustomExercises.create(Array.isArray(state.customExercises) ? state.customExercises : [],
+                payload, { officialNames: officialNames, groups: groups });
+
+        if (!result.ok) {
+            setCustomExerciseError(result.reason, true);
+            return false;
+        }
+
+        // Persistir ANTES de atualizar o estado ou confirmar sucesso.
+        if (typeof Persistence === 'undefined' ||
+            typeof Persistence.saveCustomExercises !== 'function') {
+            setCustomExerciseError('save-error', false);
+            return false;
+        }
+
+        const saveResult = Persistence.saveCustomExercises(result.list);
+        const saveStatus = customExerciseSaveStatus(saveResult);
+        if (saveStatus !== 'saved' && saveStatus !== 'normalized' && saveStatus !== 'memory') {
+            setCustomExerciseError('save-error', false);
+            return false;
+        }
+
+        const target = isEditing ? 'custom-exercises'
+            : (state.customExerciseReturnScreen === 'custom-exercises' ? 'custom-exercises' : 'add-exercise');
+        // Usa sempre a lista aceita pelo armazenamento: nunca uma lista maior
+        // do que aquilo que a persistência realmente preservou.
+        state.customExercises = customExerciseAcceptedList(saveResult, result.list);
+        setCustomExerciseError(null);
+        const form = document.getElementById('custom-exercise-form');
+        if (form) form.reset();
+        state.editingCustomExerciseId = null;
+        state.customExerciseReturnScreen = 'add-exercise';
+        if (saveStatus === 'saved') {
+            showToast(I18n.t(isEditing ? 'custom_exercise_updated' : 'custom_exercise_created'), 'success');
+        } else if (saveStatus === 'normalized') {
+            showToast(I18n.t('custom_exercise_partial_save'), 'error');
+        } else {
+            showToast(I18n.t('custom_exercise_memory_only'), 'error');
+        }
+        navigate(target);
+        restoreCustomExerciseFocus(target);
+        return true;
     }
 
     function renderConfigExercise(index) {
@@ -1191,7 +1919,7 @@
             const cat = catalogItem(ex.catalogId);
             return `<div class="exercise-list-item" style="padding: 8px;">
                 <div style="font-weight:700; color:var(--text-muted); width:20px;">${idx+1}</div>
-                <div class="info"><h4>${cat.name}</h4><p>${ex.sets}x${ex.reps} • ${ex.weight}kg</p></div>
+                <div class="info"><h4>${catalogText(cat.name)}</h4><p>${ex.sets}x${ex.reps} • ${ex.weight}kg</p></div>
             </div>`;
         }).join('');
     }
@@ -2016,6 +2744,11 @@
     // ================= LÓGICA: EXCLUSÃO DE ROTINA + CONFIRMAÇÃO + FEEDBACK =================
 
     let _confirmHandler = null;
+    let _confirmReturnFocus = null;
+    let _confirmModalOpen = false;
+    let _confirmDismissible = true;
+    let _confirmTrapActive = false;
+    let _confirmInerted = [];
     let _toastTimer = null;
 
     function showToast(message, type) {
@@ -2027,22 +2760,152 @@
         _toastTimer = setTimeout(() => { el.className = 'app-toast'; }, 2600);
     }
 
-    function showConfirm(title, description, onConfirm) {
+    /** Controles realmente focáveis do diálogo, na ordem do DOM (A-04). */
+    function modalFocusables(root) {
+        if (!root) return [];
+        return Array.from(root.querySelectorAll(
+            'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), ' +
+            'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )).filter((el) => {
+            if (el.hasAttribute('disabled')) return false;
+            if (el.getAttribute('aria-hidden') === 'true') return false;
+            if (el.closest && el.closest('[inert]')) return false;
+            return typeof el.getClientRects !== 'function' || el.getClientRects().length > 0;
+        });
+    }
+
+    /** Isola o fundo com `inert`, preservando o que já estava inerte. */
+    function setModalBackgroundInert(modal, inert) {
+        if (!inert) {
+            _confirmInerted.forEach((el) => {
+                if (el.isConnected) el.removeAttribute('inert');
+            });
+            _confirmInerted = [];
+            return;
+        }
+        if (!modal || !modal.parentElement) return;
+        _confirmInerted = [];
+        Array.from(modal.parentElement.children).forEach((el) => {
+            if (el === modal) return;
+            if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE' || el.tagName === 'LINK') return;
+            // Um fundo já inerte antes da abertura continua inerte no fechamento.
+            if (el.hasAttribute('inert')) return;
+            el.setAttribute('inert', '');
+            _confirmInerted.push(el);
+        });
+    }
+
+    function confirmModalTrapKeydown(e) {
+        if (!_confirmModalOpen) return;
+
+        if (e.key === 'Escape') {
+            // Componentes internos com comportamento próprio podem consumir o
+            // Escape antes de o diálogo decidir (ex.: select aberto).
+            if (e.defaultPrevented) return;
+            e.preventDefault();
+            // Fecha apenas esta camada; não deixa o evento chegar a outro modal.
+            e.stopImmediatePropagation();
+            if (_confirmDismissible) closeConfirmModal();
+            return;
+        }
+
+        if (e.key !== 'Tab') return;
+        const modal = document.getElementById('confirm-modal');
+        if (!modal) return;
+        const items = modalFocusables(modal);
+        if (!items.length) {
+            e.preventDefault();
+            if (typeof modal.focus === 'function') modal.focus();
+            return;
+        }
+        const first = items[0];
+        const last = items[items.length - 1];
+        const active = document.activeElement;
+        const inside = items.indexOf(active) !== -1;
+        if (e.shiftKey) {
+            if (!inside || active === first) {
+                e.preventDefault();
+                last.focus();
+            }
+        } else if (!inside || active === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    }
+
+    function engageConfirmFocusTrap() {
+        if (_confirmTrapActive) return;
+        _confirmTrapActive = true;
+        document.addEventListener('keydown', confirmModalTrapKeydown, false);
+    }
+
+    function releaseConfirmFocusTrap() {
+        if (!_confirmTrapActive) return;
+        _confirmTrapActive = false;
+        document.removeEventListener('keydown', confirmModalTrapKeydown, false);
+    }
+
+    /** Garante um destino válido depois que o callback altera a tela. */
+    function ensureActiveScreenFocus() {
+        if (isUsableFocusTarget(document.activeElement)) return true;
+        return focusFallbackForScreen();
+    }
+
+    function showConfirm(title, description, onConfirm, options) {
+        const opts = options || {};
+        // Reabrir sem fechar antes não pode empilhar listeners/estado.
+        if (_confirmModalOpen) closeConfirmModal({ restoreFocus: false });
+        const modal = document.getElementById('confirm-modal');
+        if (!modal) return false;
+
         document.getElementById('confirm-title').innerText = title;
         document.getElementById('confirm-desc').innerText = description;
         _confirmHandler = typeof onConfirm === 'function' ? onConfirm : null;
-        document.getElementById('confirm-modal').classList.add('active');
+        _confirmReturnFocus = isUsableFocusTarget(document.activeElement)
+            ? document.activeElement : null;
+        _confirmDismissible = opts.dismissible !== false;
+        _confirmModalOpen = true;
+        modal.classList.add('active');
+        setModalBackgroundInert(modal, true);
+        engageConfirmFocusTrap();
+
+        // Cancelar é o foco seguro; se estiver indisponível, usa o primeiro
+        // controle válido ou o próprio diálogo (tabindex="-1").
+        const cancel = document.getElementById('confirm-cancel');
+        const focusables = modalFocusables(modal);
+        const initial = focusables.indexOf(cancel) !== -1 ? cancel : (focusables[0] || modal);
+        if (initial && typeof initial.focus === 'function') initial.focus();
+        return true;
     }
 
-    function closeConfirmModal() {
-        document.getElementById('confirm-modal').classList.remove('active');
+    function closeConfirmModal(options) {
+        const opts = options || {};
+        const shouldRestore = opts.restoreFocus !== false;
+        const returnFocus = _confirmReturnFocus;
+        const modal = document.getElementById('confirm-modal');
+
+        _confirmReturnFocus = null;
         _confirmHandler = null;
+        _confirmModalOpen = false;
+        _confirmDismissible = true;
+        releaseConfirmFocusTrap();
+        // O fundo precisa voltar a ser focável ANTES de devolver o foco ao
+        // acionador, pois ele pode estar dentro de uma região inert.
+        setModalBackgroundInert(modal, false);
+        if (modal) modal.classList.remove('active');
+
+        if (!shouldRestore) return;
+        if (isUsableFocusTarget(returnFocus)) returnFocus.focus();
+        else focusFallbackForScreen();
     }
 
     function confirmModalAccept() {
         const cb = _confirmHandler;
-        closeConfirmModal();
+        // O callback pode remover o acionador (ex.: excluir um item da lista).
+        // Não restauramos o foco antes dele; garantimos um destino válido depois.
+        closeConfirmModal({ restoreFocus: false });
         if (cb) cb();
+        ensureActiveScreenFocus();
     }
 
     // Persistência de rotinas: no modo memória (storage indisponível) a
@@ -2099,6 +2962,47 @@
     document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('search-catalog').addEventListener('input', renderCatalog);
 
+        // Sprint 5.2.1/A-01: IDs de catálogo nunca entram em onclick inline.
+        // Delegação por data-attribute mantém o dado como texto e impede que
+        // um id malformado do storage vire código executável.
+        const catalogContainer = document.getElementById('catalog-container');
+        if (catalogContainer) {
+            catalogContainer.addEventListener('click', (event) => {
+                const button = event.target && event.target.closest
+                    ? event.target.closest('.btn-add-circle') : null;
+                if (!button) return;
+                const catalogId = button.getAttribute('data-catalog-id');
+                if (catalogId) addExerciseToRoutine(catalogId);
+            });
+        }
+
+        const customList = document.getElementById('custom-exercises-list');
+        if (customList) {
+            customList.addEventListener('click', (event) => {
+                const button = event.target && event.target.closest
+                    ? event.target.closest('[data-custom-action]') : null;
+                if (!button) return;
+                const customId = button.getAttribute('data-custom-id');
+                const action = button.getAttribute('data-custom-action');
+                if (!customId) return;
+                if (action === 'edit') openCustomExerciseEdit(customId);
+                else if (action === 'delete') askDeleteCustomExercise(customId);
+            });
+        }
+
+        // Sprint 5.2.1: criação de exercício personalizado.
+        const customForm = document.getElementById('custom-exercise-form');
+        if (customForm) {
+            customForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                createCustomExercise();
+            });
+        }
+        const customName = document.getElementById('custom-exercise-name');
+        if (customName) customName.addEventListener('input', clearCustomExerciseError);
+        const customMuscle = document.getElementById('custom-exercise-muscle');
+        if (customMuscle) customMuscle.addEventListener('change', clearCustomExerciseError);
+
         // Modal genérico de confirmação (Fase 2C)
         const confirmCancel = document.getElementById('confirm-cancel');
         const confirmOk = document.getElementById('confirm-ok');
@@ -2132,6 +3036,12 @@
         // E7: nomes acessíveis dos controles simbólicos do Player (+15s/−15s/✕).
         applyPlayerA11yLabels();
         I18n.onChange(() => applyPlayerA11yLabels());
+        // Sprint 5.2.1: placeholder, grupos e erro do cadastro no idioma ativo,
+        // preservando o que o usuário digitou.
+        I18n.onChange(() => refreshCustomExerciseTranslations());
+        // Sprint 5.2.1 (Fase 4): rótulos/aria da lista e erros de gerenciamento
+        // também acompanham o idioma ativo.
+        I18n.onChange(() => refreshCustomExercisesManagementTranslations());
         // Sprint 5.1: a Home semanal é texto derivado do histórico (nomes de dias,
         // com ou sem treino, contadores) -> redesenha quando o idioma muda.
         I18n.onChange(() => renderHome());
