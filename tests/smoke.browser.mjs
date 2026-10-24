@@ -3837,6 +3837,478 @@ async function main() {
     navigate('home');
   })()`, "restaurar Home após personalizados");
 
+  // --- Sprint 5.3: nome da rotina ------------------------------------------
+  // Bloco isolado no fim: limpa o storage e recarrega para um estado previsível.
+  await ev(`(function(){
+    Object.keys(localStorage).forEach(function(k){
+      if (k.indexOf('tt_ds_v1_') === 0) localStorage.removeItem(k);
+    });
+    return true;
+  })()`, "limpar storage do bloco 5.3");
+  await loadPage();
+  await installRoutineHelpers();
+
+  const nameCreate = await ev(`(function(){
+    navigate('workouts');
+    __click('#screen-workouts .header-nav .btn-primary');
+    var input = document.getElementById('routine-name');
+    var label = document.querySelector('label[for="routine-name"]');
+    var help = document.getElementById('routine-name-help');
+    var out = {
+      tela: state.currentScreen,
+      id: state.editingRoutineId,
+      letra: state.tempEditRoutine.letter,
+      nomeInicial: state.tempEditRoutine.name,
+      campo: !!input,
+      label: label ? label.innerText.trim() : '',
+      placeholder: input ? input.placeholder : '',
+      maxlength: input ? input.maxLength : -1,
+      help: help ? help.innerText.trim() : '',
+      aria: input ? input.getAttribute('aria-describedby') : ''
+    };
+    input.focus();
+    input.value = 'Peito e Tríceps';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    out.buffer = state.tempEditRoutine.name;
+    __click('#screen-edit .header-nav .btn-primary');
+    var stored = JSON.parse(localStorage.getItem('tt_ds_v1_routines') || 'null') || [];
+    var saved = stored.filter(function(r){ return r.id === out.id; })[0] || {};
+    out.storedName = saved.name;
+    out.detailsTitle = document.getElementById('details-title').innerText.trim();
+    out.detailsName = document.getElementById('details-name').innerText.trim();
+    out.detailsHidden = document.getElementById('details-name').hidden;
+    navigate('workouts');
+    var card = document.querySelector('#routines-container .routine-card[data-routine-id="' + out.id + '"]');
+    out.listName = card ? card.querySelector('.routine-info h4').innerText.trim() : null;
+    out.listLetter = card ? card.querySelector('.routine-letter').innerText.trim() : null;
+    return out;
+  })()`, "criar rotina com nome personalizado");
+
+  check("5.3: campo de nome acessível, com placeholder e limite de 60",
+    nameCreate.tela === 'edit' && nameCreate.campo === true &&
+    nameCreate.label === 'Nome da rotina' &&
+    nameCreate.placeholder.indexOf('Peito') !== -1 &&
+    nameCreate.maxlength === 60 && nameCreate.help.indexOf('60') !== -1 &&
+    nameCreate.aria.indexOf('routine-name-help') !== -1,
+    JSON.stringify(nameCreate));
+
+  check("5.3: criar rotina com nome personalizado grava o nome (letra continua automática)",
+    nameCreate.id === 'rD' && nameCreate.letra === 'D' &&
+    nameCreate.buffer === 'Peito e Tríceps' &&
+    nameCreate.storedName === 'Peito e Tríceps' &&
+    nameCreate.detailsTitle === 'Treino D' &&
+    nameCreate.detailsName === 'Peito e Tríceps' && nameCreate.detailsHidden === false &&
+    nameCreate.listName === 'Peito e Tríceps' && nameCreate.listLetter === 'D',
+    JSON.stringify(nameCreate));
+
+  await loadPage();
+  await installRoutineHelpers();
+
+  const nameReload = await ev(`(function(){
+    var r = state.routines.filter(function(x){ return x.id === 'rD'; })[0] || {};
+    navigate('workouts');
+    var card = document.querySelector('#routines-container .routine-card[data-routine-id="rD"]');
+    var listName = card ? card.querySelector('.routine-info h4').innerText.trim() : null;
+    navigate('details', 'rD');
+    return {
+      memoryName: r.name,
+      letter: r.letter,
+      listName: listName,
+      detailsTitle: document.getElementById('details-title').innerText.trim(),
+      detailsName: document.getElementById('details-name').innerText.trim()
+    };
+  })()`, "recarregar nome personalizado");
+
+  check("5.3: nome personalizado sobrevive ao reload e aparece na lista/detalhes",
+    nameReload.memoryName === 'Peito e Tríceps' && nameReload.letter === 'D' &&
+    nameReload.listName === 'Peito e Tríceps' &&
+    nameReload.detailsTitle === 'Treino D' &&
+    nameReload.detailsName === 'Peito e Tríceps',
+    JSON.stringify(nameReload));
+
+  const nameEdit = await ev(`(function(){
+    navigate('workouts');
+    var card = document.querySelector('#routines-container .routine-card[data-routine-id="rD"]');
+    card.querySelector('[data-routine-action="edit"]').click();
+    var input = document.getElementById('routine-name');
+    var before = input.value;
+    var novo = 'Peito, Tríceps & Ombros <forte>';
+    input.value = novo;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    __click('#screen-edit .header-nav .btn-primary');
+    var stored = JSON.parse(localStorage.getItem('tt_ds_v1_routines') || 'null') || [];
+    var saved = stored.filter(function(r){ return r.id === 'rD'; })[0] || {};
+    navigate('workouts');
+    var card2 = document.querySelector('#routines-container .routine-card[data-routine-id="rD"]');
+    return {
+      before: before,
+      storedName: saved.name,
+      listName: card2 ? card2.querySelector('.routine-info h4').innerText.trim() : null,
+      injectedTag: !!document.querySelector('#routines-container .routine-info forte')
+    };
+  })()`, "editar nome existente");
+
+  check("5.3: editar nome existente atualiza storage e lista, com HTML tratado como texto",
+    nameEdit.before === 'Peito e Tríceps' &&
+    nameEdit.storedName === 'Peito, Tríceps & Ombros <forte>' &&
+    nameEdit.listName === 'Peito, Tríceps & Ombros <forte>' &&
+    nameEdit.injectedTag === false,
+    JSON.stringify(nameEdit));
+
+  const nameEmpty = await ev(`(function(){
+    navigate('edit', 'rD');
+    var input = document.getElementById('routine-name');
+    input.value = '   ';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    __click('#screen-edit .header-nav .btn-primary');
+    var stored = JSON.parse(localStorage.getItem('tt_ds_v1_routines') || 'null') || [];
+    var saved = stored.filter(function(r){ return r.id === 'rD'; })[0] || {};
+    var memory = state.routines.filter(function(r){ return r.id === 'rD'; })[0] || {};
+    navigate('workouts');
+    var card = document.querySelector('#routines-container .routine-card[data-routine-id="rD"]');
+    return {
+      storedName: saved.name,
+      memoryName: memory.name,
+      listName: card ? card.querySelector('.routine-info h4').innerText.trim() : null
+    };
+  })()`, "nome vazio cai no padrão");
+
+  check("5.3: nome vazio ou só espaços cai em Treino <letter>",
+    nameEmpty.storedName === 'Treino D' && nameEmpty.memoryName === 'Treino D' &&
+    nameEmpty.listName === 'Treino D',
+    JSON.stringify(nameEmpty));
+
+  // Limite real de digitação: o navegador + o handler não passam de 60.
+  await ev(`(function(){
+    navigate('edit', 'rD');
+    var input = document.getElementById('routine-name');
+    input.focus();
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`, "preparar campo para o limite de 60");
+  await cdp.send("Input.insertText", { text: "x".repeat(70) });
+
+  const nameLimit = await ev(`(function(){
+    var input = document.getElementById('routine-name');
+    var out = { valueLength: input.value.length, bufferLength: state.tempEditRoutine.name.length };
+    var exato = 'N'.repeat(60);
+    input.value = exato;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    __click('#screen-edit .header-nav .btn-primary');
+    var stored = JSON.parse(localStorage.getItem('tt_ds_v1_routines') || 'null') || [];
+    var saved = stored.filter(function(r){ return r.id === 'rD'; })[0] || {};
+    out.storedLength = saved.name.length;
+    out.storedExact = saved.name === exato;
+    return out;
+  })()`, "limite de 60 caracteres");
+
+  check("5.3: nome é limitado a 60 caracteres na digitação e ao salvar",
+    nameLimit.valueLength === 60 && nameLimit.bufferLength === 60 &&
+    nameLimit.storedLength === 60 && nameLimit.storedExact === true,
+    JSON.stringify(nameLimit));
+
+  const nameNavigation = await ev(`(function(){
+    navigate('edit', 'rD');
+    var input = document.getElementById('routine-name');
+    var nome = 'Preservar ao navegar';
+    input.value = nome;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+
+    __click('#screen-edit button[onclick*="add-exercise"]');
+    var catalogo = state.currentScreen;
+    __click('#screen-add-exercise .btn-icon');
+    var voltaCatalogo = {
+      tela: state.currentScreen,
+      campo: document.getElementById('routine-name').value,
+      buffer: state.tempEditRoutine.name
+    };
+
+    var add = document.querySelector('#catalog-container .btn-add-circle');
+    add.click();
+    var voltaAdd = {
+      tela: state.currentScreen,
+      campo: document.getElementById('routine-name').value,
+      buffer: state.tempEditRoutine.name
+    };
+
+    var info = document.querySelector('#edit-exercises-container .exercise-list-item .info');
+    info.click();
+    var config = state.currentScreen;
+    __click('#screen-config-exercise .btn-primary');
+    var voltaConfig = {
+      tela: state.currentScreen,
+      campo: document.getElementById('routine-name').value,
+      buffer: state.tempEditRoutine.name
+    };
+
+    __click('#screen-edit .header-nav .btn-primary');
+    var stored = JSON.parse(localStorage.getItem('tt_ds_v1_routines') || 'null') || [];
+    var saved = stored.filter(function(r){ return r.id === 'rD'; })[0] || {};
+    navigate('prep');
+    return {
+      catalogo: catalogo, voltaCatalogo: voltaCatalogo, voltaAdd: voltaAdd,
+      config: config, voltaConfig: voltaConfig,
+      storedName: saved.name,
+      prepLetter: document.getElementById('prep-routine-name').innerText.trim(),
+      prepName: document.getElementById('prep-routine-muscle').innerText.trim()
+    };
+  })()`, "preservar nome ao navegar");
+
+  check("5.3: nome digitado sobrevive a catálogo, adicionar exercício e configurar exercício",
+    nameNavigation.catalogo === 'add-exercise' &&
+    nameNavigation.voltaCatalogo.tela === 'edit' &&
+    nameNavigation.voltaCatalogo.campo === 'Preservar ao navegar' &&
+    nameNavigation.voltaCatalogo.buffer === 'Preservar ao navegar' &&
+    nameNavigation.voltaAdd.tela === 'edit' &&
+    nameNavigation.voltaAdd.campo === 'Preservar ao navegar' &&
+    nameNavigation.voltaAdd.buffer === 'Preservar ao navegar' &&
+    nameNavigation.config === 'config-exercise' &&
+    nameNavigation.voltaConfig.tela === 'edit' &&
+    nameNavigation.voltaConfig.campo === 'Preservar ao navegar' &&
+    nameNavigation.voltaConfig.buffer === 'Preservar ao navegar',
+    JSON.stringify(nameNavigation));
+
+  check("5.3: preparação continua exibindo letra e nome, e o nome salvo é preservado",
+    nameNavigation.storedName === 'Preservar ao navegar' &&
+    nameNavigation.prepLetter === 'Treino D' &&
+    nameNavigation.prepName === 'Preservar ao navegar',
+    JSON.stringify(nameNavigation));
+
+  // --- 5.3: rotina legada sem `name` ---------------------------------------
+  await ev(`(function(){
+    localStorage.setItem('tt_ds_v1_lang', 'pt');
+    localStorage.setItem('tt_ds_v1_history', '[]');
+    localStorage.setItem('tt_ds_v1_routines', JSON.stringify([
+      { id: 'rLegado', letter: 'Z', exercises: [] }
+    ]));
+    return true;
+  })()`, "semear rotina legada sem nome");
+  await loadPage();
+  await installRoutineHelpers();
+
+  const legacyName = await ev(`(function(){
+    navigate('workouts');
+    var card = document.querySelector('#routines-container .routine-card[data-routine-id="rLegado"]');
+    var listName = card ? card.querySelector('.routine-info h4').innerText.trim() : null;
+    navigate('details', 'rLegado');
+    return {
+      count: state.routines.length,
+      memoryName: state.routines[0].name,
+      listName: listName,
+      detailsTitle: document.getElementById('details-title').innerText.trim(),
+      detailsHidden: document.getElementById('details-name').hidden
+    };
+  })()`, "rotina legada sem nome");
+
+  check("5.3: rotina legada sem name usa Treino <letter> sem migração destrutiva",
+    legacyName.count === 1 && legacyName.memoryName === 'Treino Z' &&
+    legacyName.listName === 'Treino Z' &&
+    legacyName.detailsTitle === 'Treino Z' && legacyName.detailsHidden === true,
+    JSON.stringify(legacyName));
+
+  // --- 5.3: XSS no nome/id da rotina ---------------------------------------
+  await ev(`(function(){
+    var payloadNome = '<img src=x onerror="window.__xss=1">';
+    localStorage.setItem('tt_ds_v1_lang', 'pt');
+    localStorage.setItem('tt_ds_v1_history', '[]');
+    localStorage.setItem('tt_ds_v1_routines', JSON.stringify([
+      { id: 'rA', letter: 'A', name: payloadNome, exercises: [] },
+      { id: 'rB', letter: 'B', name: '<svg onload="window.__xss2=1"></svg>', exercises: [] },
+      { id: 'rX" data-x="1', letter: 'X', name: 'Id malicioso', exercises: [] }
+    ]));
+    window.__xss = undefined;
+    window.__xss2 = undefined;
+    return true;
+  })()`, "semear nomes e id maliciosos");
+  await loadPage();
+  await installRoutineHelpers();
+
+  const xss = await ev(`(function(){
+    navigate('workouts');
+    function cardByName(nome){
+      return Array.prototype.filter.call(
+        document.querySelectorAll('#routines-container .routine-card'),
+        function(c){ return c.querySelector('.routine-info h4').innerText === nome; }
+      )[0] || null;
+    }
+    var payloadNome = '<img src=x onerror="window.__xss=1">';
+    var card = cardByName(payloadNome);
+    var out = {
+      cards: document.querySelectorAll('#routines-container .routine-card').length,
+      imagensInjetadas: document.querySelectorAll('#routines-container img').length,
+      svgsInjetados: document.querySelectorAll('#routines-container svg').length,
+      atributoInjetado: document.querySelectorAll('#routines-container [data-x]').length,
+      nomeTexto: card ? card.querySelector('.routine-info h4').innerText : null,
+      nomeHtml: card ? card.querySelector('.routine-info h4').innerHTML : null,
+      xss1: window.__xss,
+      xss2: window.__xss2
+    };
+
+    if (card) card.click();
+    out.detailsTitulo = document.getElementById('details-title').innerText.trim();
+    out.detailsNome = document.getElementById('details-name').innerText.trim();
+    out.detailsImagens = document.querySelectorAll('#details-exercises-container img').length;
+
+    navigate('workouts');
+    var cardEdit = cardByName(payloadNome);
+    if (cardEdit) cardEdit.querySelector('[data-routine-action="edit"]').click();
+    out.editValue = document.getElementById('routine-name').value;
+
+    navigate('workouts');
+    var cardDel = cardByName(payloadNome);
+    if (cardDel) cardDel.querySelector('[data-routine-action="delete"]').click();
+    out.modalAberto = document.getElementById('confirm-modal').classList.contains('active');
+    out.modalTexto = document.getElementById('confirm-desc').innerText;
+    closeConfirmModal();
+
+    navigate('workouts');
+    var cardId = cardByName('Id malicioso');
+    if (cardId) cardId.querySelector('[data-routine-action="edit"]').click();
+    out.idEditado = state.editingRoutineId;
+    out.idValue = document.getElementById('routine-name').value;
+    return out;
+  })()`, "XSS no nome/id da rotina");
+
+  check("5.3: nome/id maliciosos são exibidos como texto, nunca executados",
+    xss.cards === 3 && xss.imagensInjetadas === 0 && xss.svgsInjetados === 0 &&
+    xss.atributoInjetado === 0 && xss.xss1 === undefined && xss.xss2 === undefined &&
+    xss.nomeTexto === '<img src=x onerror="window.__xss=1">' &&
+    xss.nomeHtml.indexOf('&lt;img') !== -1 &&
+    xss.detailsNome === '<img src=x onerror="window.__xss=1">' &&
+    xss.detailsImagens === 0,
+    JSON.stringify(xss));
+
+  check("5.3: delegação data-* abre editar/excluir mesmo com nome e id especiais",
+    xss.editValue === '<img src=x onerror="window.__xss=1">' &&
+    xss.modalAberto === true &&
+    xss.modalTexto.indexOf('<img src=x onerror="window.__xss=1">') !== -1 &&
+    xss.idEditado === 'rX" data-x="1' && xss.idValue === 'Id malicioso',
+    JSON.stringify(xss));
+
+  // --- 5.3: excluir rotina intermediária e criar sem colisão ---------------
+  await ev(`(function(){
+    localStorage.setItem('tt_ds_v1_lang', 'pt');
+    localStorage.setItem('tt_ds_v1_routines', JSON.stringify([
+      { id: 'rA', letter: 'A', name: 'A', exercises: [] },
+      { id: 'rB', letter: 'B', name: 'B', exercises: [] },
+      { id: 'rC', letter: 'C', name: 'C', exercises: [] }
+    ]));
+    localStorage.setItem('tt_ds_v1_history', JSON.stringify([
+      { id: 1, name: 'Treino B', date: 'hoje', duration: '10 min', status: 'completed',
+        routineId: 'rB', letter: 'B' }
+    ]));
+    return true;
+  })()`, "semear rotinas A/B/C e histórico com B");
+  await loadPage();
+  await installRoutineHelpers();
+
+  const collision = await ev(`(function(){
+    navigate('workouts');
+    askDeleteRoutine('rB');
+    document.getElementById('confirm-ok').click();
+    var depoisExclusao = state.routines.map(function(r){ return r.id; }).sort();
+
+    __click('#screen-workouts .header-nav .btn-primary');
+    var primeiro = { id: state.editingRoutineId, letter: state.tempEditRoutine.letter,
+      name: state.tempEditRoutine.name };
+    navigate('workouts');
+    askDeleteRoutine(primeiro.id);
+    document.getElementById('confirm-ok').click();
+    __click('#screen-workouts .header-nav .btn-primary');
+    var segundo = { id: state.editingRoutineId, letter: state.tempEditRoutine.letter };
+
+    navigate('workouts');
+    askDeleteRoutine('rC');
+    document.getElementById('confirm-ok').click();
+    __click('#screen-workouts .header-nav .btn-primary');
+    var terceiro = { id: state.editingRoutineId, letter: state.tempEditRoutine.letter };
+
+    return {
+      depoisExclusao: depoisExclusao,
+      primeiro: primeiro, segundo: segundo, terceiro: terceiro,
+      idsFinais: state.routines.map(function(r){ return r.id; }),
+      historico: state.history.length
+    };
+  })()`, "excluir intermediária e criar sem colisão");
+
+  check("5.3: após excluir B (referenciada no histórico), o próximo treino não reutiliza B/C",
+    collision.depoisExclusao.join(',') === 'rA,rC' &&
+    collision.primeiro.id === 'rD' && collision.primeiro.letter === 'D' &&
+    collision.primeiro.name === 'Treino D' &&
+    collision.historico === 1,
+    JSON.stringify(collision));
+
+  check("5.3: letra liberada (sem referência no histórico) volta a ser usada sem duplicar ID",
+    collision.segundo.id === 'rD' && collision.segundo.letter === 'D' &&
+    collision.terceiro.id === 'rC' && collision.terceiro.letter === 'C' &&
+    new Set(collision.idsFinais).size === collision.idsFinais.length,
+    JSON.stringify(collision));
+
+  // --- 5.3: falha de persistência ------------------------------------------
+  const createFailure = await ev(`(function(){
+    navigate('workouts');
+    var antes = state.routines.length;
+    var storageAntes = localStorage.getItem('tt_ds_v1_routines');
+    var original = Persistence.saveRoutines;
+    Persistence.saveRoutines = function(){ return false; };
+    __click('#screen-workouts .header-nav .btn-primary');
+    var toast = document.getElementById('app-toast');
+    var out = {
+      antes: antes,
+      depois: state.routines.length,
+      tela: state.currentScreen,
+      storageIntacto: localStorage.getItem('tt_ds_v1_routines') === storageAntes,
+      toast: (toast.innerText || '').trim(),
+      toastErro: toast.className.indexOf('error') !== -1,
+      toastVisivel: toast.className.indexOf('show') !== -1
+    };
+    Persistence.saveRoutines = original;
+    return out;
+  })()`, "falha ao criar rotina");
+
+  check("5.3: falha ao criar não altera estado/storage nem finge sucesso",
+    createFailure.depois === createFailure.antes &&
+    createFailure.tela === 'workouts' && createFailure.storageIntacto === true &&
+    createFailure.toastVisivel === true && createFailure.toastErro === true &&
+    createFailure.toast.indexOf('criar') !== -1,
+    JSON.stringify(createFailure));
+
+  const nameSaveFailure = await ev(`(function(){
+    var alvo = state.routines[0];
+    navigate('edit', alvo.id);
+    var input = document.getElementById('routine-name');
+    input.value = 'Nome que não deve salvar';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    var original = Persistence.saveRoutines;
+    Persistence.saveRoutines = function(){ return false; };
+    __click('#screen-edit .header-nav .btn-primary');
+    var toast = document.getElementById('app-toast');
+    var out = {
+      tela: state.currentScreen,
+      nomeNoEstado: state.routines[0].name,
+      nomeNoBuffer: state.tempEditRoutine.name,
+      toast: (toast.innerText || '').trim(),
+      toastErro: toast.className.indexOf('error') !== -1,
+      toastVisivel: toast.className.indexOf('show') !== -1
+    };
+    Persistence.saveRoutines = original;
+    return out;
+  })()`, "falha ao salvar nome");
+
+  check("5.3: falha ao salvar nome não atualiza estado, preserva o buffer e avisa",
+    nameSaveFailure.tela === 'edit' &&
+    nameSaveFailure.nomeNoEstado !== 'Nome que não deve salvar' &&
+    nameSaveFailure.nomeNoBuffer === 'Nome que não deve salvar' &&
+    nameSaveFailure.toastVisivel === true && nameSaveFailure.toastErro === true &&
+    nameSaveFailure.toast.indexOf('salvar') !== -1,
+    JSON.stringify(nameSaveFailure));
+
+  await ev(`(function(){
+    I18n.setLocale('pt');
+    navigate('home');
+  })()`, "restaurar Home após o bloco 5.3");
+
   // --- Erros de JS ----------------------------------------------------------
   const realErrors = jsErrors.filter((e) => !/unsplash|net::ERR|Failed to load resource|ERR_BLOCKED/i.test(e));
   check("nenhum erro de JS no console", realErrors.length === 0, realErrors.slice(0, 3).join(" | "));

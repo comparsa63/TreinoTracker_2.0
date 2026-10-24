@@ -15,6 +15,12 @@
 ```
 
 - Definida/normalizada em `js/persistence.js` (`sanitizeExercise`, `sanitizeRoutine`).
+- `letter` é a **identificação automática** do treino (`A`, `B`, `C`…) e não muda
+  quando o usuário edita o nome. `name` é o rótulo livre exibido ao lado dela.
+- `name` é opcional e tem limite visual de **60 caracteres** na UI. Na leitura do
+  disco, `sanitizeRoutine` aplica `str(raw.name, "Treino " + letter)`: registro
+  legado sem `name`, ou com `name` vazio/só espaços, recebe `Treino <letter>`.
+  Não há migração destrutiva — o valor existente é preservado.
 - `sets`, `reps`, `weight`, `rest` são a **prescrição planejada** (o "combinado"),
   não o que foi executado.
 - Mínimos garantidos na leitura do disco: `sets ≥ 1`, `reps ≥ 1`, `weight ≥ 0`,
@@ -71,12 +77,18 @@ lista/detalhes ──"✎"/"Editar"──> navigate('edit', id)
 
 tempEditRoutine  <── push ── addExerciseToRoutine(catalogId)        ("+" do catálogo)
                  <── ajuste ─ updateConfig('sets'|'reps'|'weight'|'rest', delta)
+                 <── input ── updateRoutineName(value)               (campo #routine-name)
                  ──> renderEditList()                                (redesenha a tela)
                  ──> saveRoutineEdits()  ──> persistRoutines() ──> Persistence.saveRoutines() ──> localStorage
 ```
 
 - `tempEditRoutine` é o **buffer da edição**: até o "Salvar", nada toca o estado
   persistido. O `state.routines[...]` original **não** é mutado durante a edição.
+- O campo `#routine-name` grava em `state.tempEditRoutine.name` a cada `input`.
+  Como o buffer é a fonte da verdade da tela, o nome digitado sobrevive a idas ao
+  catálogo, a "Adicionar exercício" e a "Configurar exercício".
+- No "Salvar", o nome recebe `trim`; se ficar vazio, vira `Treino <letter>`.
+  Nome e letra são independentes: a letra continua automática.
 - Voltar do catálogo (`navigate('edit')` **sem** id) ou de "Configurar exercício"
   mantém o buffer (`showEditScreen()`); abrir a rotina pela lista/detalhes (**com**
   id) começa uma edição nova, descartando o rascunho (`startEditRoutine(id)`).
@@ -153,6 +165,54 @@ Player          -> sessão com 3 exercícios e 5 séries no 1º (prescrição pr
 - Estrutura persistida da rotina, sanitização, chaves do `localStorage`.
 - Home (resumo semanal, faixa de recentes, cardio, dias consecutivos), i18n pt/en/es,
   Histórico, PRs, Player/descanso/Wake Lock/ActionGuard.
-- `createNewRoutine()` continua ignorando o retorno de `Persistence.saveRoutines`
-  (o mesmo `persistRoutines()` pode ser aplicado ali numa próxima passada — não faz
-  parte deste defeito).
+- `createNewRoutine()` naquele momento ignorava o retorno de `Persistence.saveRoutines`.
+  Isso foi corrigido na Sprint 5.3 (ver seção 5), sem alterar o contrato público.
+
+---
+
+## 5. Sprint 5.3 — nome da rotina
+
+### 5.1 Regra funcional
+
+- A **letra** (`letter`) e o **id** (`r<letter>`) continuam automáticos e estáveis;
+  o **nome** (`name`) é editável e não participa da identificação.
+- Tela de edição: campo `#routine-name` com `<label for>`, placeholder, ajuda
+  (`aria-describedby`) e `maxlength="60"`. O valor é sincronizado com
+  `state.tempEditRoutine.name` a cada alteração e repintado a partir do buffer
+  quando a tela volta do catálogo/configuração.
+- Ao salvar: `trim`; nome vazio/só espaços → `Treino <letter>`. O limite de 60 é
+  aplicado na digitação e novamente no salvamento.
+- A lista de rotinas e a tela de detalhes exibem o nome. A letra continua no
+  título (`Treino A`); o nome aparece como subtítulo quando é diferente do padrão.
+  Preparação e histórico mantêm o comportamento anterior.
+
+### 5.2 Compatibilidade e persistência
+
+- Rotinas legadas sem `name` (ou com nome em branco) são lidas como
+  `Treino <letter>` por `sanitizeRoutine`, sem reescrever o storage e sem perder
+  `id`, `letter` ou `exercises`.
+- `createNewRoutine()` e `saveRoutineEdits()` usam o `persistRoutines()` existente
+  e só atualizam `state.routines` depois da gravação. Falha de storage vira toast
+  de erro, mantém o buffer e **não** indica sucesso.
+- `createNewRoutine()` escolhe a próxima letra considerando **rotinas e histórico**:
+  uma letra referenciada por um treino antigo não é reutilizada (evita que um novo
+  treino herde registros de outro). Depois de excluir uma rotina intermediária,
+  a próxima criação não colide com IDs/letras existentes.
+
+### 5.3 Segurança (XSS)
+
+`renderRoutines()` não interpola mais `id`, `letter` ou `name` em `onclick` inline.
+O HTML é montado com `TTUtils.escapeHtml` e os cliques usam delegação por
+`data-routine-action` / `data-routine-id`. Nome contendo `<`, `>`, `&`, aspas ou
+um id malformado aparece como texto e nunca é executado. O mesmo padrão de
+delegação já usado pelo catálogo foi adotado.
+
+### 5.4 Cobertura de teste
+
+- `tests/modules.test.js` — contagem/paridade de i18n (127 chaves), textos do nome
+  nos 3 idiomas, round-trip do nome, separação letra/nome, legado sem `name` e
+  `name` em branco.
+- `tests/smoke.browser.mjs` — fluxo real: criação com nome, recarga, edição,
+  vazio/só espaços, limite de 60, preservação ao navegar por catálogo/configuração,
+  exibição em lista/detalhes/preparação, legado, XSS, exclusão de rotina
+  intermediária sem colisão e falha de persistência (criar e salvar nome).

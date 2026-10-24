@@ -197,7 +197,7 @@ function testI18n() {
   suite("I18n");
 
   ok("3 idiomas", I.LOCALES.join(",") === "pt,en,es");
-  eq("124 chaves (84 + 21 do cadastro + 17 do gerenciamento + 2 da A-09)", I.keys().length, 124);
+  eq("127 chaves (124 + 3 do nome da rotina)", I.keys().length, 127);
 
   const ptKeys = Object.keys(I.dict.pt).sort();
   const enKeys = Object.keys(I.dict.en).sort();
@@ -261,6 +261,20 @@ function testI18n() {
       I.dict.pt.delete_custom_exercise_aria.includes("{name}") &&
       I.dict.en.delete_custom_exercise_aria.includes("{name}") &&
       I.dict.es.delete_custom_exercise_aria.includes("{name}"));
+
+  // Sprint 5.3 — nome da rotina (pt/en/es, paridade e conteúdo útil).
+  const routineNameKeys = ["routine_name", "routine_name_placeholder", "routine_name_help"];
+  ok("textos do nome da rotina nos 3 idiomas",
+    routineNameKeys.every((key) =>
+      ["pt", "en", "es"].every((locale) =>
+        typeof I.dict[locale][key] === "string" && I.dict[locale][key].length > 0 &&
+        I.dict[locale][key] !== key)));
+  ok("nome da rotina é diferente da identificação por letra",
+    I.dict.pt.routine_name === "Nome da rotina" &&
+      I.dict.en.routine_name === "Routine name" &&
+      I.dict.es.routine_name === "Nombre de la rutina");
+  ok("ajuda do nome cita o limite de 60 caracteres nos 3 idiomas",
+    ["pt", "en", "es"].every((locale) => I.dict[locale].routine_name_help.includes("60")));
 
   // Textos da Home (não podem mudar)
   eq("Home pt greeting", I.dict.pt.greeting, "Olá, Atleta");
@@ -3064,7 +3078,15 @@ function testWiring() {
   ok("resumo de PRs no histórico presente", html.includes('id="pr-summary"'));
   ok("exclusão usa RoutineActions + persistência existente",
     html.includes("RoutineActions.deleteRoutine(") && html.includes("Persistence.saveRoutines("));
-  ok("botão de exclusão (−) no card da rotina", html.includes("askDeleteRoutine('${r.id}')") && html.includes("btn-minus"));
+  ok("card da rotina usa delegação data-* (sem onclick inline com dados do usuário)",
+    html.includes('data-routine-action="delete"') &&
+      html.includes('data-routine-action="edit"') && html.includes("btn-minus") &&
+      !html.includes("askDeleteRoutine('${r.id}')") &&
+      !html.includes("navigate('details', '${r.id}')"));
+  ok("campo de nome da rotina presente, acessível e limitado a 60",
+    html.includes('id="routine-name"') && html.includes('for="routine-name"') &&
+      /id="routine-name"[^>]*maxlength="60"/.test(html) &&
+      html.includes('aria-describedby="routine-name-help"'));
   // Sprint 4: as séries concluídas passaram a ser registradas pelo DOMÍNIO
   // (WorkoutSession.completeSet) e a entrada de histórico é montada pelo
   // CONTROLADOR (que passou a deter `dateISO`/duração).
@@ -4128,6 +4150,37 @@ function testRoutinePersistence() {
     html.includes("state.tempEditRoutine.exercises.push({"));
   ok("'Salvar' só troca o estado DEPOIS de gravar (falha não vira sucesso)",
     html.includes("if (!persistRoutines(next)) {") && html.includes("state.routines = next;"));
+
+  // Sprint 5.3 — nome da rotina: round-trip, legado e separação letra/nome.
+  suite("Rotina: nome personalizado (Sprint 5.3)");
+  const sbName = makeSandbox();
+  loadModules(sbName, ["js/utils.js", "services/storage.js", "js/i18n.js", "js/persistence.js"]);
+  const Pn = sbName.Persistence;
+  const Sn = sbName.StorageService;
+
+  const nomeada = {
+    id: "rA", letter: "A", name: "Peito e Tríceps",
+    exercises: [{ catalogId: "A-01", sets: 4, reps: 10, weight: 30, rest: 60 }],
+  };
+  ok("grava rotina com nome personalizado", Pn.saveRoutines([nomeada]) === true);
+  const alvoNome = { routines: [], history: [], lang: "pt", autoRestEnabled: true };
+  Pn.hydrate(alvoNome);
+  eq("nome personalizado sobrevive ao round-trip", alvoNome.routines[0].name, "Peito e Tríceps");
+  eq("nome não substitui a letra de identificação", alvoNome.routines[0].letter, "A");
+  eq("nome não substitui o id", alvoNome.routines[0].id, "rA");
+
+  Sn.save("routines", [{ id: "rLegadoNome", letter: "Z", exercises: [] }]);
+  const alvoLegadoNome = { routines: [], history: [], lang: "pt", autoRestEnabled: true };
+  Pn.hydrate(alvoLegadoNome);
+  eq("rotina legada sem name recebe o padrão Treino <letter>",
+    alvoLegadoNome.routines[0].name, "Treino Z");
+  eq("rotina legada preserva id e letra", [alvoLegadoNome.routines[0].id, alvoLegadoNome.routines[0].letter],
+    ["rLegadoNome", "Z"]);
+
+  Sn.save("routines", [{ id: "rBranco", letter: "B", name: "   ", exercises: [] }]);
+  const alvoBranco = { routines: [], history: [], lang: "pt", autoRestEnabled: true };
+  Pn.hydrate(alvoBranco);
+  eq("name vazio/whitespace também cai no padrão", alvoBranco.routines[0].name, "Treino B");
 }
 
 // ---------------------------------------------------------------------------

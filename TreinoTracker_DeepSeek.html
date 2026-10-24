@@ -203,11 +203,28 @@
             display: flex; align-items: center; justify-content: center;
             font-size: 1.5rem; font-weight: 800;
         }
-        .routine-info { flex: 1; }
-        .routine-info h4 { font-size: 1.1rem; margin-bottom: 4px; }
+        .routine-info { flex: 1; min-width: 0; }
+        .routine-info h4 {
+            font-size: 1.1rem; margin-bottom: 4px;
+            overflow-wrap: anywhere; word-break: break-word;
+        }
         .routine-info p { font-size: 0.8rem; color: var(--text-muted); }
 
         /* ================= TELA 3/4: DETALHES E EDIÇÃO ================= */
+        .screen-heading {
+            display: flex; align-items: center; gap: 12px;
+            min-width: 0; flex: 1;
+        }
+        .screen-heading-text { min-width: 0; }
+        .screen-heading-text h2 {
+            overflow-wrap: anywhere; word-break: break-word;
+        }
+        .routine-name-subtitle {
+            color: var(--text-muted); font-size: 0.9rem; margin-top: 2px;
+            overflow-wrap: anywhere; word-break: break-word;
+        }
+        .routine-name-subtitle[hidden] { display: none; }
+        .routine-name-field { margin-bottom: 20px; }
         .exercise-list-item {
             background: var(--card-bg);
             border-radius: var(--border-radius-sm);
@@ -581,9 +598,12 @@
     <!-- ================= TELA 3: DETALHES DA ROTINA ================= -->
     <section id="screen-details" class="screen">
         <div class="header-nav">
-            <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="screen-heading">
                 <button class="btn btn-icon" onclick="navigate('workouts')">←</button>
-                <h2 id="details-title">Treino A</h2>
+                <div class="screen-heading-text">
+                    <h2 id="details-title">Treino A</h2>
+                    <p id="details-name" class="routine-name-subtitle" hidden></p>
+                </div>
             </div>
             <button class="btn btn-sm" onclick="navigate('edit', state.editingRoutineId)" data-i18n="edit">Editar</button>
         </div>
@@ -596,11 +616,19 @@
     <!-- ================= TELA 4: EDITAR ROTINA ================= -->
     <section id="screen-edit" class="screen">
         <div class="header-nav">
-            <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="screen-heading">
                 <button class="btn btn-icon" onclick="navigate('details')">←</button>
                 <h2 id="edit-title">Editar Treino A</h2>
             </div>
             <button class="btn btn-sm btn-primary" onclick="saveRoutineEdits()" data-i18n="save">Salvar</button>
+        </div>
+        <div class="form-field routine-name-field">
+            <label for="routine-name" data-i18n="routine_name">Nome da rotina</label>
+            <input type="text" id="routine-name" name="routine-name" maxlength="60" autocomplete="off"
+                   aria-describedby="routine-name-help"
+                   placeholder="Ex.: Peito e Tríceps"
+                   oninput="updateRoutineName(this.value)">
+            <p id="routine-name-help" class="field-help" data-i18n="routine_name_help">Máximo de 60 caracteres. Se ficar vazio, usamos "Treino A".</p>
         </div>
         <div id="edit-exercises-container"></div>
         <div style="margin-top: 16px;">
@@ -1175,38 +1203,100 @@
 
     // ================= LÓGICA: ROTINAS E EDIÇÃO =================
 
+    /** Nome exibido: o nome do usuário ou o padrão automático da letra. */
+    function routineDisplayName(routine) {
+        const name = routine && typeof routine.name === 'string' ? routine.name.trim() : '';
+        return name || `Treino ${routine.letter}`;
+    }
+
+    /**
+     * Próxima letra/ID livres considerando rotinas E histórico. Uma letra
+     * usada por um treino antigo continua "ocupada": reutilizá-la faria um
+     * novo treino herdar registros do histórico de outro treino.
+     */
+    function nextRoutineLetter(routines, history) {
+        const used = new Set();
+        (Array.isArray(routines) ? routines : []).forEach(r => {
+            if (!r) return;
+            if (r.letter) used.add(String(r.letter).toUpperCase());
+        });
+        (Array.isArray(history) ? history : []).forEach(h => {
+            if (!h) return;
+            if (h.letter) used.add(String(h.letter).toUpperCase());
+            if (typeof h.routineId === 'string' && /^r[A-Z]$/i.test(h.routineId)) {
+                used.add(h.routineId.slice(1).toUpperCase());
+            }
+        });
+        for (let i = 0; i < 26; i++) {
+            const letter = String.fromCharCode(65 + i);
+            if (!used.has(letter)) return letter;
+        }
+        // Depois de Z não há letra: usa um número livre e mantém o ID único.
+        let n = 27;
+        while (used.has(String(n))) n++;
+        return String(n);
+    }
+
     function renderRoutines() {
         const container = document.getElementById('routines-container');
-        container.innerHTML = state.routines.map(r => `
-            <div class="routine-card" onclick="navigate('details', '${r.id}')">
-                <div class="routine-letter">${r.letter}</div>
-                <div class="routine-info">
-                    <h4>${r.name}</h4>
-                    <p>${r.exercises.length} exercícios</p>
+        container.innerHTML = state.routines.map(r => {
+            const safeId = TTUtils.escapeHtml(r.id);
+            const safeLetter = TTUtils.escapeHtml(r.letter);
+            const safeName = TTUtils.escapeHtml(routineDisplayName(r));
+            return `
+                <div class="routine-card" role="button" tabindex="0"
+                     data-routine-action="open" data-routine-id="${safeId}">
+                    <div class="routine-letter">${safeLetter}</div>
+                    <div class="routine-info">
+                        <h4>${safeName}</h4>
+                        <p>${r.exercises.length} exercícios</p>
+                    </div>
+                    <div class="routine-actions">
+                        <button class="btn btn-sm" type="button" title="Editar treino"
+                                data-routine-action="edit" data-routine-id="${safeId}">✎</button>
+                        <button class="btn btn-sm btn-minus" type="button" title="Excluir treino"
+                                data-routine-action="delete" data-routine-id="${safeId}">−</button>
+                    </div>
                 </div>
-                <div class="routine-actions">
-                    <button class="btn btn-sm" title="Editar treino" onclick="event.stopPropagation(); navigate('edit', '${r.id}')">✎</button>
-                    <button class="btn btn-sm btn-minus" title="Excluir treino" onclick="event.stopPropagation(); askDeleteRoutine('${r.id}')">−</button>
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
     function createNewRoutine() {
-        const nextLetter = String.fromCharCode(65 + state.routines.length);
+        const nextLetter = nextRoutineLetter(state.routines, state.history);
         const newId = 'r' + nextLetter;
-        state.routines.push({
-            id: newId, letter: nextLetter, name: 'Novo treino', exercises: []
-        });
-        Persistence.saveRoutines(state.routines);
+        const routine = {
+            id: newId, letter: nextLetter, name: `Treino ${nextLetter}`, exercises: []
+        };
+        // Grava ANTES de mostrar a edição: se o storage falhar, não abrimos uma
+        // rotina que só existe na memória como se tivesse sido criada.
+        const next = state.routines.concat([routine]);
+        if (!persistRoutines(next)) {
+            showToast('Não foi possível criar o treino.', 'error');
+            return;
+        }
+        state.routines = next;
         navigate('edit', newId);
     }
 
     function renderDetails(routineId) {
         state.editingRoutineId = routineId;
         const r = state.routines.find(x => x.id === routineId);
+        if (!r) {
+            showToast('Treino não encontrado.', 'error');
+            navigate('workouts');
+            return;
+        }
         document.getElementById('details-title').innerText = `Treino ${r.letter}`;
-        
+
+        // A letra continua sendo a identificação; o nome é uma camada extra.
+        // Quando o nome ainda é o padrão ("Treino A"), não repetimos o título.
+        const nameEl = document.getElementById('details-name');
+        const name = routineDisplayName(r);
+        const isDefault = name === `Treino ${r.letter}`;
+        nameEl.innerText = isDefault ? '' : name;
+        nameEl.hidden = isDefault;
+
         const container = document.getElementById('details-exercises-container');
         if (r.exercises.length === 0) {
             container.innerHTML = '<p class="text-muted" style="text-align:center; margin-top:20px;">Nenhum exercício adicionado.</p>';
@@ -1229,6 +1319,29 @@
     }
 
     /**
+     * Mantém `tempEditRoutine.name` sincronizado a cada digitação. O buffer é a
+     * fonte da verdade enquanto a edição não é salva; sem isso, ir ao catálogo
+     * ou configurar um exercício e voltar descartaria o nome digitado.
+     */
+    function updateRoutineName(value) {
+        if (!state.tempEditRoutine) return;
+        const clean = (typeof value === 'string' ? value : '').slice(0, 60);
+        state.tempEditRoutine.name = clean;
+        const input = document.getElementById('routine-name');
+        if (input && input.value !== clean) input.value = clean;
+    }
+
+    /** Repinta o campo de nome a partir do buffer (inclusive placeholder). */
+    function syncRoutineNameField() {
+        const input = document.getElementById('routine-name');
+        if (!input) return;
+        const t = state.tempEditRoutine;
+        input.value = t && typeof t.name === 'string' ? t.name.slice(0, 60) : '';
+        const table = (typeof translations !== 'undefined' && translations[state.lang]) || {};
+        if (table.routine_name_placeholder) input.placeholder = table.routine_name_placeholder;
+    }
+
+    /**
      * Abre uma edição NOVA a partir do estado (`state.routines`): usada quando a
      * navegação traz a rotina escolhida (lista, detalhes ou recém-criada).
      */
@@ -1237,6 +1350,7 @@
         const r = state.routines.find(x => x.id === routineId);
         state.tempEditRoutine = JSON.parse(JSON.stringify(r));
         document.getElementById('edit-title').innerText = `Editar Treino ${r.letter}`;
+        syncRoutineNameField();
         renderEditList();
     }
 
@@ -1252,6 +1366,7 @@
         const t = state.tempEditRoutine;
         if (t && t.id === state.editingRoutineId) {
             document.getElementById('edit-title').innerText = `Editar Treino ${t.letter}`;
+            syncRoutineNameField();
             renderEditList();
             return;
         }
@@ -1309,13 +1424,17 @@
         // A lista é montada à parte e só substitui o estado DEPOIS da gravação:
         // se o storage falhar, memória e disco seguem iguais e a falha aparece
         // (nunca como um "salvo com sucesso" silencioso).
+        const draft = JSON.parse(JSON.stringify(state.tempEditRoutine));
+        const trimmedName = (typeof draft.name === 'string' ? draft.name : '').trim().slice(0, 60);
+        draft.name = trimmedName || `Treino ${draft.letter}`;
         const next = state.routines.slice();
-        next[index] = JSON.parse(JSON.stringify(state.tempEditRoutine));
+        next[index] = draft;
         if (!persistRoutines(next)) {
             showToast('Não foi possível salvar o treino.', 'error');
             return;
         }
         state.routines = next;
+        state.tempEditRoutine = draft;
         navigate('details', state.editingRoutineId);
     }
 
@@ -2930,7 +3049,7 @@
         }
         showConfirm(
             'Excluir treino?',
-            `O treino "${r.name}" (Treino ${r.letter}) será removido. Histórico e recordes são preservados.`,
+            `O treino "${routineDisplayName(r)}" (Treino ${r.letter}) será removido. Histórico e recordes são preservados.`,
             () => {
                 const result = (typeof RoutineActions !== 'undefined')
                     ? RoutineActions.deleteRoutine({
@@ -2973,6 +3092,35 @@
                 if (!button) return;
                 const catalogId = button.getAttribute('data-catalog-id');
                 if (catalogId) addExerciseToRoutine(catalogId);
+            });
+        }
+
+        // Sprint 5.3: o nome da rotina é editável pelo usuário, então ele NUNCA
+        // entra em onclick inline. A delegação por data-* mantém nome/letra/id
+        // como texto e impede que um nome malformado do storage vire código.
+        const routinesContainer = document.getElementById('routines-container');
+        if (routinesContainer) {
+            routinesContainer.addEventListener('click', (event) => {
+                const actionEl = event.target && event.target.closest
+                    ? event.target.closest('[data-routine-action]') : null;
+                if (!actionEl) return;
+                const action = actionEl.getAttribute('data-routine-action');
+                const routineId = actionEl.getAttribute('data-routine-id');
+                if (!routineId) return;
+                if (action === 'open') navigate('details', routineId);
+                else if (action === 'edit') navigate('edit', routineId);
+                else if (action === 'delete') askDeleteRoutine(routineId);
+            });
+            routinesContainer.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                const card = event.target && event.target.closest
+                    ? event.target.closest('[data-routine-action="open"]') : null;
+                // Só o próprio card abre por teclado: Enter/Espaço nos botões
+                // internos (editar/excluir) continuam acionando o botão focado.
+                if (!card || event.target !== card) return;
+                event.preventDefault();
+                const routineId = card.getAttribute('data-routine-id');
+                if (routineId) navigate('details', routineId);
             });
         }
 
