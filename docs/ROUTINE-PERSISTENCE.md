@@ -209,10 +209,53 @@ delegação já usado pelo catálogo foi adotado.
 
 ### 5.4 Cobertura de teste
 
-- `tests/modules.test.js` — contagem/paridade de i18n (127 chaves), textos do nome
+- `tests/modules.test.js` — contagem/paridade de i18n (130 chaves), textos do nome
   nos 3 idiomas, round-trip do nome, separação letra/nome, legado sem `name` e
   `name` em branco.
 - `tests/smoke.browser.mjs` — fluxo real: criação com nome, recarga, edição,
   vazio/só espaços, limite de 60, preservação ao navegar por catálogo/configuração,
   exibição em lista/detalhes/preparação, legado, XSS, exclusão de rotina
   intermediária sem colisão e falha de persistência (criar e salvar nome).
+
+---
+
+## 6. Sprint 5.3 / Incremento 2 — descanso prescrito no Player
+
+### 6.1 Duas coisas diferentes (não confundir)
+
+| O quê | Onde | Passo | Persiste? | Efeito |
+| --- | --- | --- | --- | --- |
+| Descanso **prescrito** do exercício | Player, logo abaixo de “Descanso Automático” | 30 s | Sim (sessão + rotina) | Define o tempo usado quando uma série é concluída |
+| Descanso **em execução** | Overlay do timer | 15 s | Não (efêmero) | Ajusta apenas o timer aberto; some ao pular/encerrar/recarregar |
+
+- O ajuste rápido do overlay continua sendo `−15s` / `+15s` e passa por
+  `adjustRestTime` → `WorkoutController.restAdd` → `RestTimer.addTime`. Esse
+  caminho **não** grava a prescrição.
+- Os controles do Player usam `adjustPrescribedRest(±30)`, que altera
+  `session.exercises[current].rest` e o exercício correspondente em
+  `state.routines` (`routineId` da sessão), depois persiste com
+  `WorkoutController.save` + `persistRoutines`.
+
+### 6.2 Regras de valor
+
+- Faixa configurável: **30 s (00:30)** a **3.570 s (59:30)**, passo de 30 s.
+- Exibição em `MM:SS` (`formatRestMMSS`), inclusive para valores legados.
+- `rest = 0` continua significando **sem descanso**. Ele não é convertido em 30
+  automaticamente: no primeiro `+` vira 30 s; `−` em zero permanece zero.
+- Valores legados positivos fora da faixa (ex.: 10 s ou 5.000 s) são exibidos
+  como estão, sem migração automática. O primeiro ajuste aplica o limite:
+  `target = atual ± 30`, limitado a `[30, 3570]`. Valores como 45 s e 90 s
+  continuam válidos e não são arredondados para múltiplos de 30.
+- O toggle “Descanso Automático” continua sendo estado separado
+  (`state.autoRestEnabled`): ligar/desligar não altera o valor prescrito.
+
+### 6.3 Compatibilidade e falha
+
+- A sessão e a rotina são sanitizadas pelo caminho já existente
+  (`Math.max(0, Math.round(rest))`); a faixa de 30–3.570 é uma regra de **UI**
+  aplicada no ajuste, não uma nova regra destrutiva de leitura.
+- Se a gravação da sessão ou da rotina falhar, o valor em memória volta ao
+  anterior, o toast `rest_config_save_error` é exibido e a UI é repintada.
+- A rotina é localizada por `session.routineId`; o exercício é casado primeiro
+  pela mesma posição e validado por `catalogId`, com fallback para o primeiro
+  `catalogId` igual. Sem correspondência, apenas a sessão é persistida.

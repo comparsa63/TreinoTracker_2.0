@@ -4309,6 +4309,224 @@ async function main() {
     navigate('home');
   })()`, "restaurar Home após o bloco 5.3");
 
+  // --- Sprint 5.3 / Inc. 2: descanso prescrito no Player --------------------
+  // Bloco isolado: storage limpo e recarga para partir das rotinas padrão.
+  await ev(`(function(){
+    Object.keys(localStorage).forEach(function(k){
+      if (k.indexOf('tt_ds_v1_') === 0) localStorage.removeItem(k);
+    });
+    return true;
+  })()`, "limpar storage do bloco do descanso prescrito");
+  await loadPage();
+  await installRoutineHelpers();
+
+  const prescribed = await ev(`(function(){
+    function routineOf(session){
+      return state.routines.filter(function(r){ return r.id === session.routineId; })[0] || null;
+    }
+    function routineRest(session){
+      var r = routineOf(session);
+      var i = session.currentExerciseIndex;
+      return r && r.exercises[i] ? r.exercises[i].rest : null;
+    }
+    navigate('home');
+    state.session = null;
+    state.editingRoutineId = state.routines[0].id;
+    startWorkoutSession();
+    var s = state.session;
+    var ex = s.exercises[0];
+    var auto = document.querySelector('.auto-rest-row');
+    var row = document.getElementById('player-rest-config-row');
+    var display = function(){ return document.getElementById('player-rest-config').innerText; };
+    var out = {
+      rowAfterAuto: !!(row && auto && auto.nextElementSibling === row),
+      rowBeforeNav: !!(row && row.compareDocumentPosition(document.querySelector('.player-nav-btns')) & Node.DOCUMENT_POSITION_FOLLOWING),
+      label: document.getElementById('player-rest-config-label').textContent.trim(),
+      initialRest: ex.rest,
+      initialDisplay: display(),
+      initialRoutineRest: routineRest(s)
+    };
+
+    adjustPrescribedRest(30);
+    out.plus = { rest: ex.rest, display: display(), routineRest: routineRest(s) };
+    adjustPrescribedRest(-30);
+    out.minus = { rest: ex.rest, display: display(), routineRest: routineRest(s) };
+
+    // Limites: não cai abaixo de 30 s nem passa de 3.570 s.
+    ex.rest = 30; updatePlayerUI();
+    adjustPrescribedRest(-30);
+    out.min = { rest: ex.rest, display: display() };
+    ex.rest = 3570; updatePlayerUI();
+    adjustPrescribedRest(30);
+    out.max = { rest: ex.rest, display: display() };
+
+    // Valores legados 45/90 continuam válidos e não são arredondados na leitura.
+    ex.rest = 45; updatePlayerUI();
+    out.legacy45 = { rest: ex.rest, display: display() };
+    adjustPrescribedRest(30);
+    out.legacy45Plus = { rest: ex.rest, display: display() };
+    ex.rest = 90; updatePlayerUI();
+    out.legacy90 = { rest: ex.rest, display: display() };
+
+    // rest = 0 é "sem descanso": − permanece em 0; + define o mínimo.
+    ex.rest = 0; updatePlayerUI();
+    out.zero = { rest: ex.rest, display: display() };
+    adjustPrescribedRest(-30);
+    out.zeroMinus = ex.rest;
+    adjustPrescribedRest(30);
+    out.zeroPlus = { rest: ex.rest, display: display() };
+
+    // O toggle de descanso automático não altera a prescrição.
+    ex.rest = 120; updatePlayerUI();
+    var beforeToggle = ex.rest;
+    document.getElementById('toggle-auto-rest').checked = false;
+    toggleAutoRest();
+    var afterOff = ex.rest;
+    document.getElementById('toggle-auto-rest').checked = true;
+    toggleAutoRest();
+    out.toggle = {
+      before: beforeToggle, afterOff: afterOff, afterOn: ex.rest,
+      enabled: state.autoRestEnabled
+    };
+
+    // Falha de persistência da rotina: reverte memória e avisa.
+    // Sincroniza sessão e rotina em 120 s antes de provocar a falha.
+    ex.rest = 90;
+    var rFailure = routineOf(s);
+    if (rFailure && rFailure.exercises[s.currentExerciseIndex]) {
+      rFailure.exercises[s.currentExerciseIndex].rest = 90;
+    }
+    updatePlayerUI();
+    adjustPrescribedRest(30);
+    var beforeFailure = ex.rest;
+    var originalSaveRoutines = Persistence.saveRoutines;
+    Persistence.saveRoutines = function(){ return false; };
+    var failureReturn = adjustPrescribedRest(30);
+    Persistence.saveRoutines = originalSaveRoutines;
+    var toast = document.getElementById('app-toast');
+    out.failure = {
+      returned: failureReturn,
+      before: beforeFailure,
+      rest: ex.rest,
+      routineRest: routineRest(s),
+      toast: (toast.innerText || '').trim(),
+      toastErro: toast.className.indexOf('error') !== -1
+    };
+
+    // Deixa uma prescrição conhecida persistida (150 s) para o teste de recarga.
+    adjustPrescribedRest(30);
+    out.persisted = {
+      rest: ex.rest, routineRest: routineRest(s), display: display()
+    };
+
+    // Timer em execução: ±15s continua e NÃO altera a prescrição.
+    completeSet();
+    var timer = restSnapshot(new Date());
+    var prescriptionBefore = ex.rest;
+    var routineBefore = routineRest(s);
+    adjustRestTime(15);
+    adjustRestTime(-15);
+    out.timer = {
+      overlay: document.getElementById('rest-overlay').classList.contains('active'),
+      ticker: state.restTimer.id !== null,
+      status: timer.status,
+      endsAt: !!(state.restTimer.timer && state.restTimer.timer.endsAt),
+      decreaseText: document.getElementById('btn-rest-decrease').innerText.trim(),
+      increaseText: document.getElementById('btn-rest-increase').innerText.trim(),
+      prescriptionBefore: prescriptionBefore,
+      prescriptionAfter: ex.rest,
+      routineBefore: routineBefore,
+      routineAfter: routineRest(s)
+    };
+    return out;
+  })()`, "descanso prescrito no Player");
+
+  check("5.3/Inc.2: controles ficam logo abaixo de Descanso Automático",
+    prescribed.rowAfterAuto === true && prescribed.rowBeforeNav === true &&
+      prescribed.label === 'Descanso',
+    JSON.stringify({ rowAfterAuto: prescribed.rowAfterAuto, rowBeforeNav: prescribed.rowBeforeNav, label: prescribed.label }));
+  check("5.3/Inc.2: tempo inicial reflete a prescrição e +/− andam de 30 em 30",
+    prescribed.initialRest === 60 && prescribed.initialDisplay === '01:00' &&
+      prescribed.initialRoutineRest === 60 &&
+      prescribed.plus.rest === 90 && prescribed.plus.display === '01:30' &&
+      prescribed.plus.routineRest === 90 &&
+      prescribed.minus.rest === 60 && prescribed.minus.display === '01:00' &&
+      prescribed.minus.routineRest === 60,
+    JSON.stringify(prescribed));
+  check("5.3/Inc.2: respeita 00:30 e 59:30",
+    prescribed.min.rest === 30 && prescribed.min.display === '00:30' &&
+      prescribed.max.rest === 3570 && prescribed.max.display === '59:30',
+    JSON.stringify({ min: prescribed.min, max: prescribed.max }));
+  check("5.3/Inc.2: 45 s e 90 s continuam válidos (sem arredondar na leitura)",
+    prescribed.legacy45.rest === 45 && prescribed.legacy45.display === '00:45' &&
+      prescribed.legacy45Plus.rest === 75 && prescribed.legacy45Plus.display === '01:15' &&
+      prescribed.legacy90.rest === 90 && prescribed.legacy90.display === '01:30',
+    JSON.stringify({ l45: prescribed.legacy45, l45p: prescribed.legacy45Plus, l90: prescribed.legacy90 }));
+  check("5.3/Inc.2: rest=0 permanece 'sem descanso' e só + define 00:30",
+    prescribed.zero.rest === 0 && prescribed.zero.display === '00:00' &&
+      prescribed.zeroMinus === 0 &&
+      prescribed.zeroPlus.rest === 30 && prescribed.zeroPlus.display === '00:30',
+    JSON.stringify({ zero: prescribed.zero, minus: prescribed.zeroMinus, plus: prescribed.zeroPlus }));
+  check("5.3/Inc.2: alternar Descanso Automático não muda o tempo configurado",
+    prescribed.toggle.before === 120 && prescribed.toggle.afterOff === 120 &&
+      prescribed.toggle.afterOn === 120 && prescribed.toggle.enabled === true,
+    JSON.stringify(prescribed.toggle));
+  check("5.3/Inc.2: falha ao persistir reverte a prescrição e avisa",
+    prescribed.failure.returned === false && prescribed.failure.rest === prescribed.failure.before &&
+      prescribed.failure.routineRest === prescribed.failure.before &&
+      prescribed.failure.toastErro === true && prescribed.failure.toast.length > 0,
+    JSON.stringify(prescribed.failure));
+  check("5.3/Inc.2: prescrição ajustada fica persistida na sessão e na rotina",
+    prescribed.persisted.rest === 150 && prescribed.persisted.routineRest === 150 &&
+      prescribed.persisted.display === '02:30',
+    JSON.stringify(prescribed.persisted));
+  check("5.3/Inc.2: timer em execução continua com ±15s e não altera a prescrição",
+    prescribed.timer.overlay === true && prescribed.timer.ticker === true &&
+      prescribed.timer.status === 'running' && prescribed.timer.endsAt === true &&
+      prescribed.timer.decreaseText === '- 15s' && prescribed.timer.increaseText === '+ 15s' &&
+      prescribed.timer.prescriptionBefore === 150 && prescribed.timer.prescriptionAfter === 150 &&
+      prescribed.timer.routineBefore === 150 && prescribed.timer.routineAfter === 150,
+    JSON.stringify(prescribed.timer));
+
+  // Recarga real: a rotina e a nova sessão herdam o valor persistido.
+  await ev(`(function(){
+    closeRestOverlay();
+    state.session = null;
+    WorkoutController.clear();
+    return true;
+  })()`, "limpar sessão antes da recarga do descanso prescrito");
+  await loadPage();
+  await installRoutineHelpers();
+
+  const prescribedReload = await ev(`(function(){
+    var routine = state.routines.filter(function(r){ return r.id === 'rA'; })[0] || state.routines[0];
+    var stored = JSON.parse(localStorage.getItem('tt_ds_v1_routines') || '[]');
+    var storedRoutine = stored.filter(function(r){ return r.id === routine.id; })[0] || { exercises: [] };
+    var storedRest = storedRoutine.exercises[0] ? storedRoutine.exercises[0].rest : null;
+    state.editingRoutineId = routine.id;
+    state.session = null;
+    startWorkoutSession();
+    var ex = state.session.exercises[0];
+    var out = {
+      routineRest: routine.exercises[0] ? routine.exercises[0].rest : null,
+      storedRest: storedRest,
+      sessionRest: ex.rest,
+      display: document.getElementById('player-rest-config').innerText
+    };
+    discardAndExit();
+    return out;
+  })()`, "recarga do descanso prescrito");
+
+  check("5.3/Inc.2: prescrição sobrevive ao salvar e recarregar",
+    prescribedReload.routineRest === 150 && prescribedReload.storedRest === 150 &&
+      prescribedReload.sessionRest === 150 && prescribedReload.display === '02:30',
+    JSON.stringify(prescribedReload));
+
+  await ev(`(function(){
+    I18n.setLocale('pt');
+    navigate('home');
+  })()`, "restaurar Home após o bloco do descanso prescrito");
+
   // --- Erros de JS ----------------------------------------------------------
   const realErrors = jsErrors.filter((e) => !/unsplash|net::ERR|Failed to load resource|ERR_BLOCKED/i.test(e));
   check("nenhum erro de JS no console", realErrors.length === 0, realErrors.slice(0, 3).join(" | "));

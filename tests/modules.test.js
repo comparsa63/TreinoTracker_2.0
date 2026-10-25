@@ -197,7 +197,7 @@ function testI18n() {
   suite("I18n");
 
   ok("3 idiomas", I.LOCALES.join(",") === "pt,en,es");
-  eq("127 chaves (124 + 3 do nome da rotina)", I.keys().length, 127);
+  eq("130 chaves (124 + 3 do nome da rotina + 3 do descanso prescrito)", I.keys().length, 130);
 
   const ptKeys = Object.keys(I.dict.pt).sort();
   const enKeys = Object.keys(I.dict.en).sort();
@@ -275,6 +275,24 @@ function testI18n() {
       I.dict.es.routine_name === "Nombre de la rutina");
   ok("ajuda do nome cita o limite de 60 caracteres nos 3 idiomas",
     ["pt", "en", "es"].every((locale) => I.dict[locale].routine_name_help.includes("60")));
+
+  // Sprint 5.3 / Inc. 2 — descanso prescrito no Player (pt/en/es).
+  const prescribedRestKeys = [
+    "rest_config_decrease", "rest_config_increase", "rest_config_save_error",
+  ];
+  ok("textos do descanso prescrito nos 3 idiomas",
+    prescribedRestKeys.every((key) =>
+      ["pt", "en", "es"].every((locale) =>
+        typeof I.dict[locale][key] === "string" && I.dict[locale][key].length > 0 &&
+        I.dict[locale][key] !== key)));
+  ok("rótulos do descanso prescrito citam o passo de 30 s",
+    ["pt", "en", "es"].every((locale) =>
+      I.dict[locale].rest_config_decrease.indexOf("- 30s") === 0 &&
+      I.dict[locale].rest_config_increase.indexOf("+ 30s") === 0));
+  ok("rótulos do timer em execução continuam em ±15 s",
+    ["pt", "en", "es"].every((locale) =>
+      I.dict[locale].rest_decrease.indexOf("- 15s") === 0 &&
+      I.dict[locale].rest_increase.indexOf("+ 15s") === 0));
 
   // Textos da Home (não podem mudar)
   eq("Home pt greeting", I.dict.pt.greeting, "Olá, Atleta");
@@ -3388,6 +3406,46 @@ function testWorkoutPlayerE7() {
     /id="btn-rest-decrease"[^>]*data-i18n-aria-label="rest_decrease"/.test(html) &&
       /id="btn-rest-increase"[^>]*data-i18n-aria-label="rest_increase"/.test(html) &&
       html.includes('onclick="adjustRestTime(-15)"') && html.includes('onclick="adjustRestTime(15)"'));
+
+  // --- Sprint 5.3 / Inc. 2: descanso PRESCRITO no Player -------------------
+  const autoRestRow = (html.match(/<div class="auto-rest-row">[\s\S]*?<\/div>\s*<\/div>/) || [""])[0];
+  const restConfigRow = (html.match(/<div class="rest-config-row"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/) || [""])[0];
+  ok("prescrição: controles ficam logo abaixo de Descanso Automático",
+    html.indexOf('class="auto-rest-row"') !== -1 &&
+      html.indexOf('class="rest-config-row"') > html.indexOf('class="auto-rest-row"') &&
+      html.indexOf('class="rest-config-row"') < html.indexOf('class="player-nav-btns"') &&
+      autoRestRow.length > 0 && restConfigRow.length > 0);
+  ok("prescrição: − à esquerda, tempo centralizado e + à direita",
+    /id="btn-player-rest-decrease"[^>]*onclick="adjustPrescribedRest\(-30\)"[\s\S]*?id="player-rest-config"[\s\S]*?id="btn-player-rest-increase"[^>]*onclick="adjustPrescribedRest\(30\)"/.test(html));
+  ok("prescrição: valor em MM:SS com role=status e rótulo traduzível",
+    /id="player-rest-config"[^>]*role="status"[^>]*aria-live="polite"/.test(html) &&
+      /id="player-rest-config-label"[^>]*data-i18n="rest_label"/.test(html) &&
+      html.includes("formatRestMMSS"));
+  ok("prescrição: nomes acessíveis dos ±30s via i18n",
+    /id="btn-player-rest-decrease"[^>]*data-i18n-aria-label="rest_config_decrease"/.test(html) &&
+      /id="btn-player-rest-increase"[^>]*data-i18n-aria-label="rest_config_increase"/.test(html));
+  ok("prescrição: limites 30 s / 3.570 s e passo de 30 s",
+    html.includes("const PRESCRIBED_REST_MIN = 30") &&
+      html.includes("const PRESCRIBED_REST_MAX = 3570") &&
+      html.includes("const PRESCRIBED_REST_STEP = 30"));
+  const nextRestBody = (html.match(/function nextPrescribedRest\(current, delta\)[\s\S]*?\n    \}/) || [""])[0];
+  ok("prescrição: rest=0 permanece sem descanso até o usuário aumentar",
+    nextRestBody.includes("if (value === 0) return step > 0 ? PRESCRIBED_REST_MIN : 0;"));
+  ok("prescrição: primeiro ajuste normaliza valores legados para a faixa",
+    nextRestBody.includes("if (target < PRESCRIBED_REST_MIN) return PRESCRIBED_REST_MIN;") &&
+      nextRestBody.includes("if (target > PRESCRIBED_REST_MAX) return PRESCRIBED_REST_MAX;"));
+  const adjustPrescribedBody = (html.match(/function adjustPrescribedRest\(deltaSeconds\)[\s\S]*?\n    \}/) || [""])[0];
+  ok("prescrição: persiste sessão e rotina (sem tocar no timer)",
+    adjustPrescribedBody.includes("WorkoutController.save(s)") &&
+      adjustPrescribedBody.includes("persistRoutines(state.routines)") &&
+      !adjustPrescribedBody.includes("adjustRestTime") &&
+      !adjustPrescribedBody.includes("restAdd"));
+  const adjustRestBody = (html.match(/function adjustRestTime\(amountSeconds\)[\s\S]*?\n    \}/) || [""])[0];
+  ok("timer: ajuste rápido ±15s continua sem alterar a prescrição",
+    adjustRestBody.includes("WorkoutController.restAdd") &&
+      !adjustRestBody.includes("WorkoutController.save") &&
+      !adjustRestBody.includes("persistRoutines") &&
+      !adjustRestBody.includes(".rest ="));
   ok("a11y: helper aplica os rótulos e é reaplicado na troca de idioma",
     html.includes("function applyPlayerA11yLabels()") &&
       html.includes("querySelectorAll('[data-i18n-aria-label]')") &&

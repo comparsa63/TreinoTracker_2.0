@@ -412,6 +412,42 @@
             border-radius: var(--border-radius-sm);
             margin-bottom: 12px;
         }
+        /* Sprint 5.3 / Inc. 2: descanso PRESCRITO do exercício atual.
+           Não é o timer em execução (esse continua no overlay, com ±15s). */
+        .rest-config-row {
+            background: var(--card-bg);
+            padding: 12px 16px;
+            border-radius: var(--border-radius-sm);
+            margin-bottom: 16px;
+        }
+        .rest-config-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .rest-config-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .rest-config-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .rest-config-controls .btn-adjust {
+            flex: 1;
+            min-width: 48px;
+        }
+        .rest-config-value {
+            flex: 1;
+            text-align: center;
+            font-size: 1.4rem;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+        }
         .toggle-switch {
             position: relative;
             display: inline-block;
@@ -857,11 +893,18 @@
                 </label>
             </div>
 
-            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 16px; border-radius: var(--border-radius-sm); margin-bottom: 16px;">
-                <span style="font-weight: 600;" id="player-set-info">Série 1 de 4</span>
-                <div style="display: flex; align-items: center; gap: 8px; color: var(--primary); font-weight: 600; font-size: 0.9rem;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                    <span id="player-rest-time">Descanso: 60s</span>
+            <!-- Sprint 5.3 / Inc. 2: descanso PRESCRITO do exercício atual.
+                 Fica logo abaixo de "Descanso Automático" e NÃO comanda o timer
+                 em execução (os ±15s continuam no overlay do descanso). -->
+            <div class="rest-config-row" id="player-rest-config-row">
+                <div class="rest-config-head">
+                    <span style="font-weight: 600;" id="player-set-info">Série 1 de 4</span>
+                    <span class="rest-config-label" id="player-rest-config-label" data-i18n="rest_label">Descanso</span>
+                </div>
+                <div class="rest-config-controls">
+                    <button class="btn btn-adjust" id="btn-player-rest-decrease" type="button" onclick="adjustPrescribedRest(-30)" data-i18n-aria-label="rest_config_decrease" aria-label="- 30s: diminuir o descanso prescrito">−</button>
+                    <span class="rest-config-value" id="player-rest-config" role="status" aria-live="polite">01:00</span>
+                    <button class="btn btn-adjust" id="btn-player-rest-increase" type="button" onclick="adjustPrescribedRest(30)" data-i18n-aria-label="rest_config_increase" aria-label="+ 30s: aumentar o descanso prescrito">+</button>
                 </div>
             </div>
 
@@ -2148,6 +2191,100 @@
         if (el && message) el.innerText = message;
     }
 
+    // ================= DESCANSO PRESCRITO (Sprint 5.3 / Inc. 2) =================
+    // Configuração do exercício atual, exibida abaixo de "Descanso Automático".
+    // NÃO é o timer em execução: `adjustRestTime` (±15s) continua sendo o único
+    // caminho que altera o descanso efêmero do overlay.
+    const PRESCRIBED_REST_MIN = 30;      // 00:30
+    const PRESCRIBED_REST_MAX = 3570;    // 59:30
+    const PRESCRIBED_REST_STEP = 30;
+
+    /** Formata segundos em MM:SS (minutos podem passar de 59 em dados legados). */
+    function formatRestMMSS(seconds) {
+        const total = Math.max(0, Math.round(Number(seconds) || 0));
+        const minutes = Math.floor(total / 60);
+        const secs = total % 60;
+        return String(minutes).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+    }
+
+    /**
+     * Próximo valor prescrito. `rest = 0` significa "sem descanso" e NÃO é
+     * convertido em 30 automaticamente: de zero, `+` define o mínimo e `−`
+     * permanece em zero. Valores legados positivos fora da faixa são exibidos
+     * como estão e só são normalizados no primeiro ajuste (sem migração).
+     */
+    function nextPrescribedRest(current, delta) {
+        const value = Math.max(0, Math.round(Number(current) || 0));
+        const step = Math.round(Number(delta) || 0);
+        if (value === 0) return step > 0 ? PRESCRIBED_REST_MIN : 0;
+        const target = value + step;
+        if (target < PRESCRIBED_REST_MIN) return PRESCRIBED_REST_MIN;
+        if (target > PRESCRIBED_REST_MAX) return PRESCRIBED_REST_MAX;
+        return target;
+    }
+
+    /**
+     * Índice do exercício correspondente na rotina de origem da sessão.
+     * Prefere a mesma posição (a sessão nasce na ordem da rotina) e valida pelo
+     * `catalogId`; se a posição não bater, procura o primeiro id igual.
+     */
+    function routineExerciseIndexFor(routine, sessionExercise, sessionIndex) {
+        const list = routine && Array.isArray(routine.exercises) ? routine.exercises : [];
+        if (!list.length) return -1;
+        const catalogId = sessionExercise ? String(sessionExercise.catalogId || '') : '';
+        if (!catalogId) {
+            return sessionIndex >= 0 && sessionIndex < list.length ? sessionIndex : -1;
+        }
+        if (sessionIndex >= 0 && sessionIndex < list.length) {
+            const sameIndex = list[sessionIndex];
+            if (sameIndex && String(sameIndex.catalogId || '') === catalogId) return sessionIndex;
+        }
+        return list.findIndex(raw => raw && String(raw.catalogId || '') === catalogId);
+    }
+
+    /**
+     * Ajusta o descanso PRESCRITO do exercício atual em passos de 30 s.
+     * Persiste a sessão em andamento e a rotina de origem. Não toca no timer
+     * em execução (nem no toggle de descanso automático).
+     */
+    function adjustPrescribedRest(deltaSeconds) {
+        if (!state.session) return false;
+        const s = state.session;
+        const ex = s.exercises[s.currentExerciseIndex];
+        if (!ex) return false;
+
+        const previous = Math.max(0, Math.round(Number(ex.rest) || 0));
+        const next = nextPrescribedRest(previous, deltaSeconds);
+        if (next === previous) {
+            updatePlayerUI();
+            return false;
+        }
+
+        const routine = state.routines.find(r => r.id === s.routineId);
+        const routineIndex = routineExerciseIndexFor(routine, ex, s.currentExerciseIndex);
+        const previousRoutineRest = routineIndex >= 0 ? routine.exercises[routineIndex].rest : null;
+
+        // Aplica em memória, persiste os dois donos do dado e, se algo falhar,
+        // devolve o estado anterior (nada de "salvo" silencioso).
+        ex.rest = next;
+        if (routineIndex >= 0) routine.exercises[routineIndex].rest = next;
+
+        const sessionSaved = WorkoutController.save(s).ok;
+        const routinesSaved = routineIndex < 0 ? true : persistRoutines(state.routines);
+        if (!sessionSaved || !routinesSaved) {
+            ex.rest = previous;
+            if (routineIndex >= 0) routine.exercises[routineIndex].rest = previousRoutineRest;
+            if (sessionSaved) WorkoutController.save(s);
+            if (routinesSaved && routineIndex >= 0) persistRoutines(state.routines);
+            showToast(translations[state.lang].rest_config_save_error, 'error');
+            updatePlayerUI();
+            return false;
+        }
+
+        updatePlayerUI();
+        return true;
+    }
+
     function updatePlayerUI() {
         if (!state.session) return;
         const s = state.session;
@@ -2184,7 +2321,8 @@
         document.getElementById('player-actual-reps').innerText = ex.actualReps;
         
         document.getElementById('player-set-info').innerText = `Série ${s.currentSetIndex} de ${ex.sets}`;
-        document.getElementById('player-rest-time').innerText = `Descanso: ${ex.rest}s`;
+        const restConfig = document.getElementById('player-rest-config');
+        if (restConfig) restConfig.innerText = formatRestMMSS(ex.rest);
 
         document.getElementById('btn-prev-ex').style.opacity = s.currentExerciseIndex === 0 ? '0.5' : '1';
         document.getElementById('btn-next-ex').style.opacity = s.currentExerciseIndex === s.exercises.length - 1 ? '0.5' : '1';
