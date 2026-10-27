@@ -197,7 +197,7 @@ function testI18n() {
   suite("I18n");
 
   ok("3 idiomas", I.LOCALES.join(",") === "pt,en,es");
-  eq("130 chaves (124 + 3 do nome da rotina + 3 do descanso prescrito)", I.keys().length, 130);
+  eq("135 chaves (130 + 5 de próximos exercícios)", I.keys().length, 135);
 
   const ptKeys = Object.keys(I.dict.pt).sort();
   const enKeys = Object.keys(I.dict.en).sort();
@@ -293,6 +293,21 @@ function testI18n() {
     ["pt", "en", "es"].every((locale) =>
       I.dict[locale].rest_decrease.indexOf("- 15s") === 0 &&
       I.dict[locale].rest_increase.indexOf("+ 15s") === 0));
+
+  // Sprint 5.5 — próximos exercícios no Player (pt/en/es).
+  const upcomingKeys = [
+    "upcoming_exercises", "upcoming_empty", "upcoming_remaining",
+    "upcoming_remaining_one", "upcoming_fallback",
+  ];
+  ok("textos de próximos exercícios nos 3 idiomas",
+    upcomingKeys.every((key) =>
+      ["pt", "en", "es"].every((locale) =>
+        typeof I.dict[locale][key] === "string" && I.dict[locale][key].length > 0 &&
+        I.dict[locale][key] !== key)));
+  ok("contagem e fallback de próximos exercícios usam os tokens certos",
+    ["pt", "en", "es"].every((locale) =>
+      I.dict[locale].upcoming_remaining.includes("{count}") &&
+      I.dict[locale].upcoming_fallback.includes("{n}")));
 
   // Textos da Home (não podem mudar)
   eq("Home pt greeting", I.dict.pt.greeting, "Olá, Atleta");
@@ -3484,6 +3499,118 @@ function testWorkoutPlayerE7() {
 }
 
 // ---------------------------------------------------------------------------
+// Próximos exercícios no Player (Sprint 5.5)
+// ---------------------------------------------------------------------------
+function testUpcomingExercises() {
+  suite("Player: próximos exercícios (Sprint 5.5)");
+
+  const html = fs.readFileSync(path.join(ROOT, "TreinoTracker_DeepSeek.html"), "utf8");
+  const flat = html.replace(/\r/g, "");
+  const section = (flat.match(/<section id="player-upcoming"[\s\S]*?<\/section>/) || [""])[0];
+  const renderBody = (flat.match(/function renderUpcomingExercises\(s\)[\s\S]*?\n    \}/) || [""])[0];
+  const nameBody = (flat.match(/function upcomingExerciseName\(ex, position\)[\s\S]*?\n    \}/) || [""])[0];
+  const metaBody = (flat.match(/function upcomingExerciseMeta\(ex\)[\s\S]*?\n    \}/) || [""])[0];
+  const playerBody = (flat.match(/function updatePlayerUI\(\)[\s\S]*?\n    \}/) || [""])[0];
+  const innerHTMLBlock = (html.match(/id="screen-player"[\s\S]*?<!-- ================= TELA 10/) || [""])[0];
+
+  // --- posição: ABAIXO de Anterior/Próximo --------------------------------
+  ok("seção existe dentro do Player, abaixo de Anterior/Próximo",
+    section.length > 0 &&
+      flat.indexOf('id="player-upcoming"') > flat.indexOf('class="player-nav-btns"') &&
+      flat.indexOf('id="player-upcoming"') < flat.indexOf('class="fixed-action-btn"') &&
+      innerHTMLBlock.indexOf('id="player-upcoming"') !== -1);
+  ok("seção nomeada por título próprio (aria-labelledby)",
+    /<section id="player-upcoming"[^>]*aria-labelledby="player-upcoming-title"/.test(section) &&
+      /<h3[^>]*id="player-upcoming-title"[^>]*data-i18n="upcoming_exercises"/.test(section));
+  ok("lista é <ol> (ordem semântica) e vazia no HTML",
+    /<ol[^>]*id="player-upcoming-list"[^>]*>\s*<\/ol>/.test(section));
+  ok("mensagem de fim começa oculta e é traduzível",
+    /id="player-upcoming-empty"[^>]*data-i18n="upcoming_empty"[^>]*hidden/.test(section));
+  ok("contagem restante começa oculta (preenchida por JS)",
+    /id="player-upcoming-remaining"[^>]*hidden/.test(section));
+
+  // --- somente leitura ----------------------------------------------------
+  ok("lista não tem botões, cliques, tabindex nem navegação",
+    section.length > 0 &&
+      !/<button/i.test(section) && !/onclick/i.test(section) &&
+      !/tabindex/i.test(section) && !/role="button"/i.test(section) &&
+      !/data-(routine|exercise)-action/i.test(section));
+  ok("render não altera a sessão nem escreve em storage",
+    renderBody.length > 0 &&
+      !/currentExerciseIndex\s*=/.test(renderBody) &&
+      !/\.exercises\s*=/.test(renderBody) &&
+      !/WorkoutController\.save|Persistence|localStorage|WorkoutSession/.test(renderBody));
+
+  // --- derivação: até 3, a partir do atual + 1 ----------------------------
+  ok("limite de 3 itens é uma constante explícita",
+    /const UPCOMING_LIMIT = 3;/.test(flat));
+  ok("lista derivada de currentExerciseIndex + 1 com slice",
+    renderBody.includes("const start = s.currentExerciseIndex + 1;") &&
+      renderBody.includes("s.exercises.slice(start, start + UPCOMING_LIMIT)"));
+  ok("numeração é a posição ABSOLUTA no treino",
+    renderBody.includes("const position = start + i + 1;") &&
+      renderBody.includes("${position}"));
+  ok("restantes contados pela sessão, nunca negativos",
+    renderBody.includes("Math.max(0, s.exercises.length - start)"));
+  ok("fim da lista aparece quando não há próximos",
+    renderBody.includes("emptyEl.hidden = upcoming.length > 0") &&
+      renderBody.includes("upcoming_remaining"));
+
+  // --- conteúdo: nome, grupo, séries/reps, sem carga/descanso -------------
+  ok("usa nome do exercício e fallback 'Exercício N'",
+    nameBody.includes("upcoming_fallback") && nameBody.includes("'{n}'") &&
+      nameBody.includes("ex.name"));
+  ok("grupo muscular e séries × repetições só quando disponíveis",
+    metaBody.includes("ex.muscle") && metaBody.includes("ex.sets") &&
+      metaBody.includes("ex.reps") && metaBody.includes("isFinite(sets)"));
+  ok("não exibe carga nem descanso prescrito",
+    !/\bweight\b|\brest\b|\bkg\b|\bCarga\b/i.test(renderBody) &&
+      !/\bweight\b|\brest\b|\bkg\b/i.test(metaBody));
+  ok("textos do usuário passam por escape (catalogText)",
+    renderBody.includes("catalogText(upcomingExerciseName(ex, position))") &&
+      renderBody.includes("catalogText(meta)"));
+  ok("numeração absoluta exposta ao leitor de tela (badge não é decorativo)",
+    /<span class="player-upcoming-index">\$\{position\}<\/span>/.test(renderBody) &&
+      !/player-upcoming-index[^>]*aria-hidden/.test(renderBody));
+  ok("semântica de lista preservada com list-style: none (role=list p/ Safari)",
+    /<ol[^>]*id="player-upcoming-list"[^>]*role="list"/.test(section) &&
+      /\.player-upcoming-list\s*\{[\s\S]{0,200}?list-style:\s*none/.test(flat));
+
+  // --- integração: updatePlayerUI e idioma --------------------------------
+  ok("render chamado dentro de updatePlayerUI()",
+    playerBody.includes("renderUpcomingExercises(s);") &&
+      playerBody.indexOf("renderUpcomingExercises(s);") < playerBody.indexOf("querySelectorAll('#screen-player [data-i18n]')"));
+  ok("não re-renderiza quando a assinatura não mudou",
+    renderBody.includes("if (signature === upcomingSignature) return;") &&
+      renderBody.includes("state.lang"));
+  ok("troca de idioma redesenha a lista derivada",
+    /I18n\.onChange\(\(\) => \{\s*if \(!state\.session\) return;\s*upcomingSignature = '';\s*renderUpcomingExercises\(state\.session\);\s*\}\);/.test(flat));
+
+  // --- responsividade e acessibilidade ------------------------------------
+  ok("CSS da seção não usa largura fixa e trunca nomes longos",
+    /\.player-upcoming\s*\{[^}]*margin-bottom:[^}]*\}/.test(flat) &&
+      /\.player-upcoming-name,[\s\S]{0,160}?text-overflow:\s*ellipsis/.test(flat) &&
+      !/\.player-upcoming\s*\{[^}]*width:\s*\d+px/.test(flat));
+  ok("CSS remove marcadores da lista e respeita [hidden]",
+    /\.player-upcoming-list\s*\{[^}]*list-style:\s*none/.test(flat) &&
+      /\.player-upcoming-note\[hidden\]\s*\{\s*display:\s*none/.test(flat));
+  ok("seção não cria região viva (sem ruído para leitor de tela)",
+    !/aria-live/i.test(section) && !/role="status"/i.test(section));
+
+  // --- regressões: timer, descanso, CTA e pausa continuam no lugar --------
+  ok("updatePlayerUI preserva timer, descanso prescrito e CTA",
+    playerBody.includes("player-rest-config") &&
+      playerBody.includes("btn-complete-set") &&
+      playerBody.includes("btn-prev-ex"));
+  ok("pausa/retomada continuam chamando updatePlayerUI",
+    (flat.match(/function pauseWorkout\(\)[\s\S]*?\n    \}/) || [""])[0].includes("updatePlayerUI();") &&
+      (flat.match(/function resumeWorkout\(now\)[\s\S]*?\n    \}/) || [""])[0].includes("updatePlayerUI();"));
+  ok("navegação anterior/próximo continua redesenhando o Player",
+    (flat.match(/function prevExercise\(\)[\s\S]*?\n    \}/) || [""])[0].includes("updatePlayerUI();") &&
+      (flat.match(/function nextExercise\(\)[\s\S]*?\n    \}/) || [""])[0].includes("updatePlayerUI();"));
+}
+
+// ---------------------------------------------------------------------------
 // Overlay de descanso como diálogo modal (E7.1)
 // ---------------------------------------------------------------------------
 function testRestOverlayDialogE71() {
@@ -4268,6 +4395,7 @@ function testRoutinePersistence() {
   testWorkoutPlayerE5();
   testActionGuard();
   testWorkoutPlayerE7();
+  testUpcomingExercises();
   testRestOverlayDialogE71();
   testHomeInsights();
   testHomeWeeklyWiring();
