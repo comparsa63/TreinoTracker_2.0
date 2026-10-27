@@ -5,7 +5,7 @@
  * GUARDA DA HOME (golden master test).
  *
  * A tela HOME do TreinoTracker_DeepSeek está BLINDADA. Este teste falha se
- * qualquer byte do bloco da Home, das 3 regras CSS exclusivas dela, dos
+ * qualquer byte do bloco da Home, das regras CSS exclusivas dela, dos
  * seletores/variaveis compartilhados que ela consome ou das chaves de i18n
  * que ela exibe mudar.
  *
@@ -37,6 +37,19 @@ const FROZEN_CSS = [
   ".card-highlight",
   ".card-highlight::before",
   ".last-workout",
+  // Sprint 5.1 — resumo semanal (novos elementos protegidos da Home)
+  ".home-insights",
+  ".weekly-strip",
+  ".weekly-day",
+  ".home-metrics",
+  ".home-metric",
+  // Sprint 5.1.2 — faixa horizontal "Últimos treinos" (novos elementos da Home)
+  ".recent-strip",
+  ".recent-strip:focus-visible",
+  ".recent-card",
+  ".recent-card-name",
+  ".recent-card-meta",
+  ".recent-empty",
 ];
 
 /** Seletores compartilhados dos quais a Home depende (devem continuar existindo). */
@@ -77,11 +90,28 @@ function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Extrai o bloco `<section id="screen-home">...</section>` (byte-exato). */
+/**
+ * Extrai o bloco `<section id="screen-home">...</section>` (byte-exato).
+ * Balanceia as tags `<section>` para cobrir a Home INTEIRA mesmo quando ela
+ * contém uma `<section>` aninhada (Sprint 5.1) — um regex não-guloso pararia no
+ * primeiro `</section>` e deixaria o restante da Home fora da blindagem.
+ */
 function extractHomeSection(html) {
-  const m = /<section id="screen-home"[\s\S]*?<\/section>/.exec(html);
-  if (!m) throw new Error('Bloco <section id="screen-home"> nao encontrado no HTML.');
-  return m[0];
+  const start = /<section id="screen-home"[^>]*>/.exec(html);
+  if (!start) throw new Error('Bloco <section id="screen-home"> nao encontrado no HTML.');
+  const tagRe = /<section\b[^>]*>|<\/section>/g;
+  tagRe.lastIndex = start.index;
+  let depth = 0;
+  let m;
+  while ((m = tagRe.exec(html))) {
+    if (m[0] === "</section>") {
+      depth--;
+      if (depth === 0) return html.slice(start.index, m.index + m[0].length);
+    } else {
+      depth++;
+    }
+  }
+  throw new Error('Bloco <section id="screen-home"> nao foi fechado.');
 }
 
 /** Extrai uma regra CSS (do seletor ate a chave de fechamento balanceada). */

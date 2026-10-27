@@ -55,8 +55,13 @@
     /**
      * Grava um valor (qualquer JSON-serializável). Retorna true/false.
      * Nunca lança.
+     *
+     * Por padrão, quando o backend não está disponível ou falha, o payload
+     * também fica no fallback em memória (comportamento histórico). O chamador
+     * que precisa distinguir gravação durável de fallback pode passar
+     * `{ memoryFallback: false }`; nesse caso uma falha não altera a memória.
      */
-    save(name, value) {
+    save(name, value, options) {
       let payload;
       try {
         payload = JSON.stringify(value);
@@ -64,10 +69,13 @@
         console.warn("[Storage] não serializável:", name, err);
         return false;
       }
+      const opts = options || {};
+      const memoryFallback = opts.memoryFallback !== false;
       const backend = getBackend();
       const physical = PREFIX + name;
       if (!backend) {
-        memory[physical] = payload;
+        if (memoryFallback) memory[physical] = payload;
+        else delete memory[physical];
         return false;
       }
       try {
@@ -75,7 +83,8 @@
         return true;
       } catch (err) {
         console.warn("[Storage] falha ao gravar (quota?):", name, err);
-        memory[physical] = payload;
+        if (memoryFallback) memory[physical] = payload;
+        else delete memory[physical];
         return false;
       }
     },

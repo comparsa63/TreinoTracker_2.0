@@ -19,9 +19,30 @@
       return String(n).padStart(2, "0");
     },
 
-    /** Data local de hoje em ISO curto: "2026-10-18". */
+    /**
+     * Normaliza Date/epoch/"YYYY-MM-DD" numa Date local (ou o agora, quando o
+     * valor não representa um instante). NÃO usa `instanceof Date`: um Date vindo
+     * de outro realm (iframe, worker, sandbox `vm` dos testes) não passa nesse
+     * teste e, sem isto, o argumento era IGNORADO em silêncio — devolvendo "hoje".
+     */
+    toDate(value) {
+      if (value && typeof value.getTime === "function") {
+        const t = value.getTime();
+        return isFinite(t) ? new Date(t) : new Date();
+      }
+      if (typeof value === "number" && isFinite(value)) return new Date(value);
+      if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return new Date(value + "T12:00:00"); // meio-dia local: evita fuso
+      }
+      return new Date();
+    },
+
+    /**
+     * Data local em ISO curto: "2026-10-18". Aceita Date (de qualquer realm),
+     * epoch, "YYYY-MM-DD" ou nada (= hoje).
+     */
     todayISO(date) {
-      const d = date instanceof Date ? date : new Date();
+      const d = TTUtils.toDate(date);
       return d.getFullYear() + "-" + TTUtils.pad2(d.getMonth() + 1) + "-" + TTUtils.pad2(d.getDate());
     },
 
@@ -61,9 +82,7 @@
      * @returns {{start: Date, end: Date}}
      */
     getWeekRange(date) {
-      const base = (date instanceof Date)
-        ? new Date(date.getTime())
-        : (typeof date === "string" && date ? new Date(date + "T12:00:00") : new Date());
+      const base = TTUtils.toDate(date);
       const d = isNaN(base.getTime()) ? new Date() : base;
       const day = d.getDay();
       const diff = d.getDate() - day + (day === 0 ? -6 : 1); // segunda-feira

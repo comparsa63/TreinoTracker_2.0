@@ -151,6 +151,35 @@
             background: var(--card-bg); padding: 16px; border-radius: var(--border-radius-sm);
             display: flex; justify-content: space-between; align-items: center;
         }
+        /* ================= HOME: RESUMO SEMANAL (Sprint 5.1) ================= */
+        .home-insights { margin-top: 28px; }
+        .home-insights-title { margin-bottom: 12px; font-size: 1rem; }
+        .weekly-strip { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px; scrollbar-width: thin; scroll-snap-type: x proximity; }
+        .weekly-day { flex: 0 0 76px; min-height: 102px; padding: 10px 8px; border-radius: var(--border-radius-sm); background: var(--card-bg); display: flex; flex-direction: column; gap: 5px; scroll-snap-align: start; }
+        .weekly-day-name { color: var(--text-muted); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; }
+        .weekly-day-date { font-size: 1.05rem; font-weight: 800; }
+        .weekly-day-workout { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--primary); font-size: 0.72rem; font-weight: 700; }
+        .weekly-day.empty .weekly-day-workout { color: var(--text-muted); font-weight: 500; }
+        .weekly-day-more { color: var(--text-muted); font-size: 0.68rem; }
+        .home-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }
+        .home-metric { background: var(--card-bg); border-radius: var(--border-radius-sm); padding: 14px; }
+        .home-metric-label { color: var(--text-muted); font-size: 0.78rem; margin-bottom: 6px; }
+        .home-metric-value { color: var(--primary); font-size: 1.25rem; font-weight: 800; line-height: 1.2; }
+        .home-metric-note { color: var(--text-muted); font-size: 0.72rem; margin-top: 4px; }
+
+        /* ================= HOME: ÚLTIMOS TREINOS (Sprint 5.1.2) ================= */
+        /* Uma única faixa horizontal: as regras valem só para os cards de treino
+           concluído e não substituem a faixa semanal (componente distinto). */
+        .recent-strip { display: flex; gap: 12px; overflow-x: auto; padding: 2px 2px 10px; scrollbar-width: thin; scroll-snap-type: x proximity; }
+        .recent-strip:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: var(--border-radius-sm); }
+        /* Sprint 5.1.3 (M2): largura PROPORCIONAL à faixa = 2 cards inteiros + o
+           começo do 3º ("peek") em QUALQUER largura. Antes, com base fixa de
+           168px, a faixa de 384–396px caía numa zona morta: cabiam 2 cards e o
+           3º ficava inteiro fora da tela, sem pista visual de que havia mais. */
+        .recent-card { flex: 0 0 calc((100% - 24px) / 2.25); min-width: 0; min-height: 96px; padding: 14px; border-radius: var(--border-radius-sm); background: var(--card-bg); display: flex; flex-direction: column; gap: 4px; scroll-snap-align: start; }
+        .recent-card-name { font-size: 0.9rem; font-weight: 700; overflow-wrap: anywhere; }
+        .recent-card-meta { color: var(--text-muted); font-size: 0.75rem; }
+        .recent-empty { color: var(--text-muted); font-size: 0.85rem; padding: 4px 2px; }
 
         /* ================= TELA 2: MEUS TREINOS ================= */
         .routine-list { display: flex; flex-direction: column; gap: 12px; }
@@ -174,11 +203,28 @@
             display: flex; align-items: center; justify-content: center;
             font-size: 1.5rem; font-weight: 800;
         }
-        .routine-info { flex: 1; }
-        .routine-info h4 { font-size: 1.1rem; margin-bottom: 4px; }
+        .routine-info { flex: 1; min-width: 0; }
+        .routine-info h4 {
+            font-size: 1.1rem; margin-bottom: 4px;
+            overflow-wrap: anywhere; word-break: break-word;
+        }
         .routine-info p { font-size: 0.8rem; color: var(--text-muted); }
 
         /* ================= TELA 3/4: DETALHES E EDIÇÃO ================= */
+        .screen-heading {
+            display: flex; align-items: center; gap: 12px;
+            min-width: 0; flex: 1;
+        }
+        .screen-heading-text { min-width: 0; }
+        .screen-heading-text h2 {
+            overflow-wrap: anywhere; word-break: break-word;
+        }
+        .routine-name-subtitle {
+            color: var(--text-muted); font-size: 0.9rem; margin-top: 2px;
+            overflow-wrap: anywhere; word-break: break-word;
+        }
+        .routine-name-subtitle[hidden] { display: none; }
+        .routine-name-field { margin-bottom: 20px; }
         .exercise-list-item {
             background: var(--card-bg);
             border-radius: var(--border-radius-sm);
@@ -236,6 +282,71 @@
             width: 36px; height: 36px; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
             font-size: 1.5rem; font-weight: 600; cursor: pointer;
+        }
+
+        /* ================= SPRINT 5.2.1: EXERCÍCIO PERSONALIZADO ================= */
+        .new-exercise-btn {
+            width: 100%; margin-bottom: 16px;
+            border: 1px dashed var(--text-muted); background: transparent;
+        }
+        .custom-badge {
+            display: inline-block; margin-left: 6px; padding: 2px 7px;
+            border-radius: 999px; background: rgba(0, 255, 85, 0.12);
+            color: var(--primary); font-size: 0.65rem; font-weight: 700;
+            letter-spacing: 0.02em; vertical-align: middle;
+        }
+        .custom-exercise-form { display: flex; flex-direction: column; gap: 20px; }
+        .form-field { display: flex; flex-direction: column; gap: 8px; }
+        .form-field label { color: var(--text-muted); font-weight: 600; }
+        .form-field input,
+        .form-field select {
+            width: 100%; min-height: 48px;
+            background: var(--card-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--border-radius-sm);
+            color: var(--text-main);
+            font-family: var(--font-family);
+            font-size: 1rem;
+            padding: 12px 14px;
+        }
+        .form-field input::placeholder { color: var(--text-muted); }
+        .form-field [aria-invalid="true"] { border-color: var(--danger); }
+        .form-field select option { background: var(--card-bg); color: var(--text-main); }
+        .field-help { color: var(--text-muted); font-size: 0.8rem; }
+        .form-error {
+            display: none; color: var(--danger);
+            background: rgba(255, 68, 68, 0.1);
+            border: 1px solid rgba(255, 68, 68, 0.35);
+            border-radius: var(--border-radius-sm);
+            padding: 12px 14px; font-size: 0.9rem; line-height: 1.4;
+        }
+        .form-error.show { display: block; }
+        .custom-exercise-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+        .custom-exercise-entry-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+        .custom-exercise-entry-actions .new-exercise-btn {
+            flex: 1 1 140px; width: auto; margin-bottom: 0; min-height: 44px;
+        }
+        .custom-manage-list { display: flex; flex-direction: column; gap: 12px; }
+        .custom-manage-item {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+            background: var(--card-bg); border-radius: var(--border-radius-sm);
+            padding: 12px;
+        }
+        .custom-manage-item img {
+            width: 50px; height: 50px; border-radius: 8px; object-fit: cover;
+        }
+        .custom-manage-item .info { flex: 1; min-width: 0; }
+        .custom-manage-item .info h4 { font-size: 0.95rem; overflow-wrap: anywhere; }
+        .custom-manage-item .info p { font-size: 0.75rem; color: var(--text-muted); }
+        .custom-manage-actions { display: flex; gap: 8px; width: 100%; }
+        .custom-manage-actions .btn { flex: 1; min-height: 44px; }
+        .custom-manage-empty { color: var(--text-muted); text-align: center; margin-top: 24px; }
+        #btn-new-custom-exercise:focus-visible,
+        #btn-manage-custom-exercises:focus-visible,
+        #btn-manage-new-custom-exercise:focus-visible,
+        #screen-add-custom-exercise :focus-visible,
+        #screen-custom-exercises :focus-visible {
+            outline: 2px solid var(--primary); outline-offset: 2px;
         }
 
         /* ================= TELA 6: CONFIGURAR EXERCÍCIO ================= */
@@ -301,6 +412,42 @@
             border-radius: var(--border-radius-sm);
             margin-bottom: 12px;
         }
+        /* Sprint 5.3 / Inc. 2: descanso PRESCRITO do exercício atual.
+           Não é o timer em execução (esse continua no overlay, com ±15s). */
+        .rest-config-row {
+            background: var(--card-bg);
+            padding: 12px 16px;
+            border-radius: var(--border-radius-sm);
+            margin-bottom: 16px;
+        }
+        .rest-config-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .rest-config-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .rest-config-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .rest-config-controls .btn-adjust {
+            flex: 1;
+            min-width: 48px;
+        }
+        .rest-config-value {
+            flex: 1;
+            text-align: center;
+            font-size: 1.4rem;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+        }
         .toggle-switch {
             position: relative;
             display: inline-block;
@@ -337,19 +484,44 @@
         }
         .fixed-action-btn .btn { width: 100%; height: 60px; font-size: 1.1rem; box-shadow: 0 4px 20px rgba(0, 255, 85, 0.2); }
 
+        /* ================= E7: TOQUE, FOCO E TELA ACESSÍVEL (PLAYER) ================= */
+        /* Áreas de toque confortáveis (>= 44 px) nos controles do Player e das
+           suas sobreposições. Escopo por ID para NÃO afetar a Home nem as demais
+           telas que reutilizam .btn-sm / .btn-icon. */
+        #screen-player .btn-sm, #screen-player .btn-icon { min-width: 44px; min-height: 44px; }
+        #rest-overlay .btn { min-height: 48px; }
+        /* Foco visível para navegação por teclado (só onde a E7 atua). */
+        #screen-player :focus-visible,
+        #rest-overlay :focus-visible,
+        #exit-modal :focus-visible,
+        #resume-modal :focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+        /* Conteúdo só para leitores de tela (região viva de status do Player). */
+        .sr-only {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+            overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+        }
+
         /* ================= OVERLAY DE DESCANSO ================= */
         #rest-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(11, 14, 20, 0.95); backdrop-filter: blur(8px);
             z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center;
+            overflow-y: auto; /* E7: em telas curtas o conteúdo rola, sem corte */
         }
         #rest-overlay.active { display: flex; }
-        .rest-circle-container { position: relative; width: 280px; height: 280px; margin-bottom: 32px; }
+        /* E7: o círculo era fixo em 280 px e estourava telas de 320 px (280 + 48
+           de padding > 320). Passa a caber no viewport sem media query — o SVG
+           escala junto (viewBox fixo), então o traço do progresso não muda. */
+        .rest-circle-container { position: relative; width: min(280px, 72vw); height: min(280px, 72vw); margin-bottom: 32px; }
         .rest-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
         .rest-svg circle { fill: none; stroke-width: 12; stroke-linecap: round; }
         .rest-bg-circle { stroke: #1c2331; }
         .rest-progress-circle { stroke: var(--primary); stroke-dasharray: 816; stroke-dashoffset: 0; transition: stroke-dashoffset 1s linear; }
-        .rest-time-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 4rem; font-weight: 800; letter-spacing: -2px; }
+        /* E7: o número acompanha o círculo fluido (sem estourar em 320 px). */
+        .rest-time-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: clamp(2.4rem, 15vw, 4rem); font-weight: 800; letter-spacing: -2px; }
         .rest-label { font-size: 1.2rem; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 2px; }
 
         /* ================= MODAIS (SAÍDA) ================= */
@@ -412,20 +584,39 @@
             <p class="text-muted" data-i18n="greeting_sub">Pronto para o treino de hoje?</p>
         </div>
         <div class="card-highlight">
-            <h3 data-i18n="today_workout">Treino A — Peito e Tríceps</h3>
+            <p class="text-muted" style="font-size: 0.8rem; margin-bottom: 4px;" data-i18n="today_workout">Treino de hoje</p>
+            <h3 id="home-today-name">—</h3>
             <div style="display: flex; gap: 16px; margin: 16px 0;">
-                <div><span class="text-muted" style="font-size: 0.8rem;" data-i18n="exercises">Exercícios</span><p style="font-weight: 700;">6</p></div>
-                <div><span class="text-muted" style="font-size: 0.8rem;" data-i18n="duration">Duração</span><p style="font-weight: 700;">45 min</p></div>
+                <div><span class="text-muted" style="font-size: 0.8rem;" data-i18n="exercises">Exercícios</span><p id="home-today-exercises" style="font-weight: 700;">—</p></div>
+                <div><span class="text-muted" style="font-size: 0.8rem;" data-i18n="duration">Duração</span><p id="home-today-duration" style="font-weight: 700;">—</p></div>
             </div>
             <button class="btn btn-primary" style="width: 100%;" onclick="navigate('workouts')" data-i18n="start_workout">INICIAR TREINO</button>
         </div>
-        <div style="margin-top: 32px;">
-            <h4 style="margin-bottom: 12px; font-size: 1rem;" data-i18n="last_workout">Último Treino</h4>
-            <div class="last-workout">
-                <div><h4 style="font-size: 1rem;">Treino B — Costas e Bíceps</h4><p class="text-muted" style="font-size: 0.8rem;">Ontem • 50 min</p></div>
-                <div class="history-status" data-i18n="completed">Concluído</div>
+        <section style="margin-top: 32px;" aria-labelledby="home-recent-title">
+            <h4 id="home-recent-title" style="margin-bottom: 12px; font-size: 1rem;" data-i18n="recent_workouts">Últimos treinos</h4>
+            <!-- Sprint 5.1.2: faixa horizontal com os últimos treinos CONCLUÍDOS do
+                 histórico real (máx. 7), do mais recente para o mais antigo. Nada é
+                 escrito aqui de forma estática: renderHome preenche os cards ou
+                 mostra o estado vazio. `tabindex="0"` deixa a faixa rolável por
+                 teclado (setas), com foco visível. -->
+            <div id="home-recent-strip" class="recent-strip" role="list" tabindex="0" data-i18n-label="recent_strip_label"></div>
+            <p id="home-recent-empty" class="recent-empty" data-i18n="no_recent_workouts">Nenhum treino concluído ainda</p>
+            <button class="btn btn-sm" style="width: 100%; margin-top: 12px;" onclick="navigate('history')" data-i18n="see_full_history">Ver histórico completo</button>
+        </section>
+        <section class="home-insights" aria-labelledby="home-weekly-title">
+            <h3 id="home-weekly-title" class="home-insights-title" data-i18n="weekly_summary">Resumo da semana</h3>
+            <div id="home-weekly-strip" class="weekly-strip" role="list" data-i18n-label="weekly_strip_label"></div>
+            <div class="home-metrics">
+                <article class="home-metric">
+                    <p class="home-metric-label" data-i18n="cardio_week">Cardio da semana</p>
+                    <p id="home-cardio-value" class="home-metric-value">0 / 150 min</p>
+                </article>
+                <article class="home-metric">
+                    <p class="home-metric-label" data-i18n="consecutive_days">Dias seguidos</p>
+                    <p id="home-streak-value" class="home-metric-value">0 dias</p>
+                </article>
             </div>
-        </div>
+        </section>
     </section>
 
     <!-- ================= TELA 2: MEUS TREINOS ================= -->
@@ -443,9 +634,12 @@
     <!-- ================= TELA 3: DETALHES DA ROTINA ================= -->
     <section id="screen-details" class="screen">
         <div class="header-nav">
-            <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="screen-heading">
                 <button class="btn btn-icon" onclick="navigate('workouts')">←</button>
-                <h2 id="details-title">Treino A</h2>
+                <div class="screen-heading-text">
+                    <h2 id="details-title">Treino A</h2>
+                    <p id="details-name" class="routine-name-subtitle" hidden></p>
+                </div>
             </div>
             <button class="btn btn-sm" onclick="navigate('edit', state.editingRoutineId)" data-i18n="edit">Editar</button>
         </div>
@@ -458,11 +652,19 @@
     <!-- ================= TELA 4: EDITAR ROTINA ================= -->
     <section id="screen-edit" class="screen">
         <div class="header-nav">
-            <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="screen-heading">
                 <button class="btn btn-icon" onclick="navigate('details')">←</button>
                 <h2 id="edit-title">Editar Treino A</h2>
             </div>
             <button class="btn btn-sm btn-primary" onclick="saveRoutineEdits()" data-i18n="save">Salvar</button>
+        </div>
+        <div class="form-field routine-name-field">
+            <label for="routine-name" data-i18n="routine_name">Nome da rotina</label>
+            <input type="text" id="routine-name" name="routine-name" maxlength="60" autocomplete="off"
+                   aria-describedby="routine-name-help"
+                   placeholder="Ex.: Peito e Tríceps"
+                   oninput="updateRoutineName(this.value)">
+            <p id="routine-name-help" class="field-help" data-i18n="routine_name_help">Máximo de 60 caracteres. Se ficar vazio, usamos "Treino A".</p>
         </div>
         <div id="edit-exercises-container"></div>
         <div style="margin-top: 16px;">
@@ -481,8 +683,63 @@
             </div>
         </div>
         <input type="text" class="search-bar" placeholder="Buscar exercício..." data-i18n="search_placeholder" id="search-catalog">
+        <div class="custom-exercise-entry-actions">
+            <button class="btn new-exercise-btn" id="btn-new-custom-exercise" onclick="openCustomExerciseCreate('add-exercise')">
+                + <span data-i18n="new_exercise">Novo exercício</span>
+            </button>
+            <button class="btn new-exercise-btn" id="btn-manage-custom-exercises" onclick="openCustomExerciseManager()">
+                <span data-i18n="manage_custom_exercises">Meus exercícios</span>
+            </button>
+        </div>
         <div class="filters" id="catalog-filters"></div>
         <div id="catalog-container"></div>
+    </section>
+
+    <!-- ================= TELA 5.0: MEUS EXERCÍCIOS PERSONALIZADOS ================= -->
+    <section id="screen-custom-exercises" class="screen" aria-labelledby="custom-exercises-title">
+        <div class="header-nav">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <button class="btn btn-icon" onclick="closeCustomExerciseManager()" data-i18n-aria-label="back" aria-label="Voltar">←</button>
+                <h2 id="custom-exercises-title" tabindex="-1" data-i18n="custom_exercises_title">Meus exercícios</h2>
+            </div>
+        </div>
+        <p class="text-muted" style="margin-bottom: 16px;" data-i18n="custom_exercises_sub">Exercícios criados por você.</p>
+        <button class="btn new-exercise-btn" id="btn-manage-new-custom-exercise" onclick="openCustomExerciseCreate('custom-exercises')">
+            + <span data-i18n="new_exercise">Novo exercício</span>
+        </button>
+        <div id="custom-exercises-error" class="form-error" role="alert" aria-live="assertive" tabindex="-1"></div>
+        <div id="custom-exercises-list" class="custom-manage-list" role="list"></div>
+        <p id="custom-exercises-empty" class="custom-manage-empty" role="status" hidden></p>
+    </section>
+
+    <!-- ================= TELA 5.1: NOVO/EDITAR EXERCÍCIO PERSONALIZADO ================= -->
+    <section id="screen-add-custom-exercise" class="screen" aria-labelledby="custom-exercise-title">
+        <div class="header-nav">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <button class="btn btn-icon" onclick="closeCustomExerciseForm()" data-i18n-aria-label="back" aria-label="Voltar">←</button>
+                <h2 id="custom-exercise-title" data-i18n="new_exercise_title">Novo exercício</h2>
+            </div>
+        </div>
+        <form id="custom-exercise-form" class="custom-exercise-form" novalidate>
+            <div class="form-field">
+                <label for="custom-exercise-name" data-i18n="exercise_name">Nome do exercício</label>
+                <input type="text" id="custom-exercise-name" name="name" maxlength="60" autocomplete="off" required
+                       aria-describedby="custom-exercise-name-help custom-exercise-error"
+                       placeholder="Ex.: Rosca Scott">
+                <p id="custom-exercise-name-help" class="field-help" data-i18n="exercise_name_help">Máximo de 60 caracteres.</p>
+            </div>
+            <div class="form-field">
+                <label for="custom-exercise-muscle" data-i18n="muscle_group">Grupo muscular</label>
+                <select id="custom-exercise-muscle" name="muscle" required aria-describedby="custom-exercise-error">
+                    <option value="" data-i18n="muscle_group_placeholder">Selecione o grupo</option>
+                </select>
+            </div>
+            <div id="custom-exercise-error" class="form-error" role="alert" aria-live="assertive" tabindex="-1"></div>
+            <div class="custom-exercise-actions">
+                <button type="submit" class="btn btn-primary" id="btn-save-custom-exercise" data-i18n="create_exercise">Criar exercício</button>
+                <button type="button" class="btn" onclick="closeCustomExerciseForm()" data-i18n="cancel">Cancelar</button>
+            </div>
+        </form>
     </section>
 
     <!-- ================= TELA 6: CONFIGURAR EXERCÍCIO ================= -->
@@ -573,13 +830,20 @@
 
     <!-- ================= TELA 9: WORKOUT PLAYER ================= -->
     <section id="screen-player" class="screen no-padding">
+        <!-- E7: região viva que anuncia EVENTOS discretos do treino (pausa,
+             retomada, série concluída, descanso concluído) a leitores de tela.
+             O ticker do descanso NÃO escreve aqui (sem anúncio a cada 250 ms). -->
+        <div id="player-status" class="sr-only" role="status" aria-live="polite"></div>
         <div class="player-header">
             <div class="player-top-bar">
                 <div>
                     <div class="header-title" id="player-routine-name">Treino A</div>
                     <div class="text-muted" style="font-size: 0.8rem;" id="player-progress-text">Exercício 1 de 6</div>
                 </div>
-                <button class="btn btn-icon" onclick="showExitModal()">✕</button>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button class="btn btn-sm" id="btn-pause-resume" onclick="togglePauseWorkout()" data-i18n="pause_workout">Pausar</button>
+                    <button class="btn btn-icon" onclick="showExitModal()" data-i18n-aria-label="exit_workout" aria-label="Sair do treino">✕</button>
+                </div>
             </div>
             <div class="progress-container">
                 <div class="progress-bar" id="player-progress-bar"></div>
@@ -629,11 +893,18 @@
                 </label>
             </div>
 
-            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 16px; border-radius: var(--border-radius-sm); margin-bottom: 16px;">
-                <span style="font-weight: 600;" id="player-set-info">Série 1 de 4</span>
-                <div style="display: flex; align-items: center; gap: 8px; color: var(--primary); font-weight: 600; font-size: 0.9rem;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                    <span id="player-rest-time">Descanso: 60s</span>
+            <!-- Sprint 5.3 / Inc. 2: descanso PRESCRITO do exercício atual.
+                 Fica logo abaixo de "Descanso Automático" e NÃO comanda o timer
+                 em execução (os ±15s continuam no overlay do descanso). -->
+            <div class="rest-config-row" id="player-rest-config-row">
+                <div class="rest-config-head">
+                    <span style="font-weight: 600;" id="player-set-info">Série 1 de 4</span>
+                    <span class="rest-config-label" id="player-rest-config-label" data-i18n="rest_label">Descanso</span>
+                </div>
+                <div class="rest-config-controls">
+                    <button class="btn btn-adjust" id="btn-player-rest-decrease" type="button" onclick="adjustPrescribedRest(-30)" data-i18n-aria-label="rest_config_decrease" aria-label="- 30s: diminuir o descanso prescrito">−</button>
+                    <span class="rest-config-value" id="player-rest-config" role="status" aria-live="polite">01:00</span>
+                    <button class="btn btn-adjust" id="btn-player-rest-increase" type="button" onclick="adjustPrescribedRest(30)" data-i18n-aria-label="rest_config_increase" aria-label="+ 30s: aumentar o descanso prescrito">+</button>
                 </div>
             </div>
 
@@ -663,9 +934,9 @@
         </div>
     </section>
 
-    <!-- OVERLAY DE DESCANSO -->
-    <div id="rest-overlay">
-        <div class="rest-label" data-i18n="rest_label">Descanso</div>
+    <!-- OVERLAY DE DESCANSO (E7.1: diálogo modal — fundo inalcançável por Tab) -->
+    <div id="rest-overlay" role="dialog" aria-modal="true" aria-labelledby="rest-overlay-label">
+        <div class="rest-label" id="rest-overlay-label" data-i18n="rest_label">Descanso</div>
         <div class="rest-circle-container">
             <svg class="rest-svg" viewBox="0 0 280 280">
                 <circle class="rest-bg-circle" cx="140" cy="140" r="130"></circle>
@@ -673,9 +944,9 @@
             </svg>
             <div class="rest-time-text" id="rest-timer-display">01:00</div>
         </div>
-        <button class="btn btn-primary" style="width: 100%; max-width: 300px; margin-bottom: 12px;" onclick="adjustRestTime(-15)">- 15s</button>
-        <button class="btn btn-primary" style="width: 100%; max-width: 300px; margin-bottom: 12px;" onclick="adjustRestTime(15)">+ 15s</button>
-        <button class="btn" style="background: transparent; color: var(--primary); font-weight: 700;" onclick="skipRest()" data-i18n="skip_rest">Pular Descanso ➔</button>
+        <button class="btn btn-primary" id="btn-rest-decrease" data-i18n-aria-label="rest_decrease" aria-label="- 15s: diminuir o descanso" style="width: 100%; max-width: 300px; margin-bottom: 12px;" onclick="adjustRestTime(-15)">- 15s</button>
+        <button class="btn btn-primary" id="btn-rest-increase" data-i18n-aria-label="rest_increase" aria-label="+ 15s: aumentar o descanso" style="width: 100%; max-width: 300px; margin-bottom: 12px;" onclick="adjustRestTime(15)">+ 15s</button>
+        <button class="btn" id="btn-rest-skip" style="background: transparent; color: var(--primary); font-weight: 700;" onclick="skipRest()" data-i18n="skip_rest">Pular Descanso ➔</button>
     </div>
 
     <!-- MODAL DE SAÍDA -->
@@ -692,13 +963,26 @@
     </div>
 
     <!-- MODAL DE CONFIRMAÇÃO (genérico — Fase 2C) -->
-    <div class="modal-overlay" id="confirm-modal">
+    <div class="modal-overlay" id="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-desc" tabindex="-1">
         <div class="modal-content">
             <h3 id="confirm-title">Confirmar</h3>
             <p id="confirm-desc"></p>
             <div class="modal-actions">
-                <button class="btn btn-primary" id="confirm-ok">Confirmar</button>
-                <button class="btn" id="confirm-cancel">Cancelar</button>
+                <button class="btn btn-primary" id="confirm-ok" data-i18n="confirm">Confirmar</button>
+                <button class="btn" id="confirm-cancel" data-i18n="cancel">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE SESSÃO RECUPERADA (Sprint 4) -->
+    <div class="modal-overlay" id="resume-modal">
+        <div class="modal-content">
+            <h3 data-i18n="resume_title">Treino em andamento</h3>
+            <p data-i18n="resume_desc">Você tem um treino não finalizado. Deseja retomar de onde parou?</p>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="resumeRestoredSession()" data-i18n="resume_btn">Retomar treino</button>
+                <button class="btn btn-danger" onclick="discardRestoredSession()" data-i18n="resume_discard">Descartar treino</button>
+                <button class="btn" onclick="closeResumeModal()" data-i18n="resume_later">Deixar para depois</button>
             </div>
         </div>
     </div>
@@ -726,13 +1010,21 @@
 
 <!-- ================= MÓDULOS DA APP (carregam antes do script principal) ================= -->
 <script src="js/utils.js"></script>
+<script src="js/home-insights.js"></script>
 <script src="services/storage.js"></script>
 <script src="js/i18n.js"></script>
 <script src="js/data/exercises.js"></script>
 <script src="js/catalog.js"></script>
+<script src="js/custom-exercises.js"></script>
+<script src="js/custom-catalog.js"></script>
 <script src="js/events.js"></script>
 <script src="js/routine-actions.js"></script>
 <script src="js/pr.js"></script>
+<script src="js/workout-session.js"></script>
+<script src="js/rest-timer.js"></script>
+<script src="js/wake-lock.js"></script>
+<script src="js/action-guard.js"></script>
+<script src="js/workout-controller.js"></script>
 
 <script>
     // ================= CATÁLOGO REAL (Fase 2B) =================
@@ -752,8 +1044,40 @@
         img: (typeof Catalog !== 'undefined' ? Catalog.FALLBACK_IMAGE : 'assets/images/quadriceps.jpg')
     };
 
+    /** Imagem do grupo para os itens personalizados (fallback local). */
+    function catalogImage(muscle) {
+        if (typeof Catalog !== 'undefined' && typeof Catalog.muscleImage === 'function') {
+            return Catalog.muscleImage(muscle) || FALLBACK_CATALOG_ITEM.img;
+        }
+        return FALLBACK_CATALOG_ITEM.img;
+    }
+
+    /**
+     * Resolve um catalogId na ordem oficial -> personalizado -> fallback.
+     * O catálogo oficial permanece separado; o adaptador só compõe a tela.
+     */
     function catalogItem(id) {
+        if (typeof CustomCatalog !== 'undefined') {
+            return CustomCatalog.resolve(id, mockCatalog, state.customExercises,
+                FALLBACK_CATALOG_ITEM, catalogImage);
+        }
         return mockCatalog.find(c => c.id === id) || FALLBACK_CATALOG_ITEM;
+    }
+
+    /** Texto de catálogo sempre escapado (nomes personalizados são do usuário). */
+    function catalogText(value) {
+        return (typeof TTUtils !== 'undefined' && TTUtils.escapeHtml)
+            ? TTUtils.escapeHtml(value)
+            : String(value == null ? '' : value);
+    }
+
+    /**
+     * Insere o nome literalmente em um template traduzido. Usar uma função de
+     * substituição impede que `$&`, `$'`, `$`` e `$$` no nome sejam
+     * interpretados como instruções pelo motor de `String.replace` (A-08).
+     */
+    function interpolateName(template, name) {
+        return String(template).replace('{name}', () => String(name == null ? '' : name));
     }
 
     const initialRoutines = [
@@ -777,6 +1101,12 @@
         lang: 'pt',
         currentScreen: 'home',
         routines: JSON.parse(JSON.stringify(initialRoutines)),
+        // Sprint 5.2.1: lista de exercícios personalizados. Hidratada pela
+        // Persistence antes do DOMContentLoaded; nunca altera o catálogo oficial.
+        customExercises: [],
+        // Gerenciamento (Fase 4): modo do formulário e tela de retorno.
+        editingCustomExerciseId: null,
+        customExerciseReturnScreen: 'add-exercise',
         editingRoutineId: null,
         tempEditRoutine: null,
         configExerciseIndex: null,
@@ -787,8 +1117,32 @@
         ],
         session: null,
         autoRestEnabled: true, // Controla o toggle de descanso
-        restTimer: { id: null, time: 0, total: 0, isRunning: false }
+        // Sprint 4 / E5: holder do descanso. A VERDADE do tempo está no domínio
+        // (js/rest-timer.js, prazo absoluto em `endsAt`); aqui ficam apenas o
+        // objeto do timer e o id do ticker de tela. O legado `time/total/
+        // isRunning` (contador decrementado) foi removido nesta etapa.
+        restTimer: { timer: null, id: null }
     };
+
+    // Sprint 4: sessão veio do storage e o usuário ainda não decidiu
+    // (retomar/descartar). É estado de UI — não persistido e não duplica o dado
+    // da sessão. Serve para explicar, com o estado real, por que a rotina
+    // vinculada não pode ser excluída.
+    let sessionPendingDecision = false;
+
+    // Sprint 5.2.1: motivo do último erro do formulário de exercício. Fica só
+    // em memória (não é dado persistido) e permite re-traduzir a mensagem
+    // quando o idioma muda, sem apagar o que o usuário digitou.
+    let customExerciseErrorReason = null;
+    let customExercisesErrorReason = null;
+    let customExercisesErrorName = '';
+    // A-05: acionador da tela de cadastro/edição para devolver o foco ao
+    // cancelar, voltar ou concluir a operação.
+    let customExerciseReturnFocus = null;
+    // A-05: acionador da tela "Meus exercícios". Fica separado do formulário
+    // porque o gerenciador pode abrir o cadastro no meio do caminho e o
+    // retorno do gerenciador ainda precisa devolver o foco ao botão original.
+    let customExerciseManagerReturnFocus = null;
 
     // ================= DICIONÁRIO DE TRADUÇÕES =================
     // Movido para js/i18n.js (fonte única: pt/en/es). Mantemos aqui a mesma
@@ -804,7 +1158,7 @@
         document.getElementById(`screen-${screenId}`).classList.add('active');
         
         document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-        const navMap = { 'home': 0, 'workouts': 1, 'details': 1, 'edit': 1, 'add-exercise': 1, 'config-exercise': 1, 'prep': 1, 'history': 2 };
+        const navMap = { 'home': 0, 'workouts': 1, 'details': 1, 'edit': 1, 'add-exercise': 1, 'custom-exercises': 1, 'add-custom-exercise': 1, 'config-exercise': 1, 'prep': 1, 'history': 2 };
         if (navMap[screenId] !== undefined) {
             document.querySelectorAll('.nav-item')[navMap[screenId]].classList.add('active');
         }
@@ -812,10 +1166,22 @@
         document.getElementById('main-nav').style.display = (screenId === 'player') ? 'none' : 'flex';
         window.scrollTo(0, 0);
 
+        if (screenId === 'home') renderHome();
         if (screenId === 'workouts') renderRoutines();
         if (screenId === 'details') renderDetails(param || state.editingRoutineId);
-        if (screenId === 'edit') startEditRoutine(param || state.editingRoutineId);
+        // `edit` COM `param` (rotina escolhida na lista/detalhes ou recém-criada)
+        // abre uma edição NOVA a partir do estado. SEM `param` (voltando do
+        // catálogo ou de "Configurar exercício") a tela mantém a edição EM
+        // ANDAMENTO: recopiar `tempEditRoutine` aqui descartava em silêncio o
+        // exercício recém-adicionado e os ajustes de séries/reps/carga/descanso —
+        // era o defeito "os exercícios não ficam salvos ao salvar o treino".
+        if (screenId === 'edit') {
+            if (param) startEditRoutine(param);
+            else showEditScreen();
+        }
         if (screenId === 'add-exercise') renderCatalog();
+        if (screenId === 'custom-exercises') renderCustomExercisesScreen();
+        if (screenId === 'add-custom-exercise') renderCustomExerciseForm();
         if (screenId === 'config-exercise') renderConfigExercise(param);
         if (screenId === 'prep') renderPrep();
         if (screenId === 'history') renderHistory();
@@ -830,40 +1196,150 @@
         navigate(state.currentScreen);
     }
 
+    /**
+     * Um destino de foco só é válido se ainda estiver conectado, visível e
+     * realmente focável. Evita devolver o foco para telas ocultas, elementos
+     * removidos por renderização ou controles desabilitados (A-05).
+     */
+    function isUsableFocusTarget(el) {
+        if (!el || el === document.body || el === document.documentElement) return false;
+        if (!el.isConnected || typeof el.focus !== 'function') return false;
+        if (el.hasAttribute('disabled') || el.getAttribute('aria-hidden') === 'true') return false;
+        if (el.closest && el.closest('[inert]')) return false;
+        return typeof el.getClientRects !== 'function' || el.getClientRects().length > 0;
+    }
+
+    /**
+     * Destino lógico quando o acionador original não existe mais. Prioriza o
+     * título programável da tela ativa e, na ausência dele, o primeiro controle
+     * focável visível. Nunca foca o body.
+     */
+    function focusFallbackForScreen() {
+        const screen = document.getElementById('screen-' + state.currentScreen);
+        if (!screen) return false;
+
+        // Prioridade explícita: título programável e, depois, alvo marcado.
+        // querySelectorAll sozinho devolveria o botão "Voltar" do cabeçalho
+        // antes do título, o que tornaria o retorno menos previsível.
+        let preferred = screen.querySelector('h2[tabindex="-1"]');
+        if (!isUsableFocusTarget(preferred)) {
+            preferred = screen.querySelector('[data-focus-fallback]');
+        }
+        if (isUsableFocusTarget(preferred)) {
+            preferred.focus();
+            return true;
+        }
+
+        const candidates = screen.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), ' +
+            'select:not([disabled]), textarea:not([disabled]), ' +
+            '[tabindex]:not([tabindex="-1"])'
+        );
+        for (let i = 0; i < candidates.length; i++) {
+            if (isUsableFocusTarget(candidates[i])) {
+                candidates[i].focus();
+                return true;
+            }
+        }
+        return false;
+    }
+
     // ================= LÓGICA: ROTINAS E EDIÇÃO =================
+
+    /** Nome exibido: o nome do usuário ou o padrão automático da letra. */
+    function routineDisplayName(routine) {
+        const name = routine && typeof routine.name === 'string' ? routine.name.trim() : '';
+        return name || `Treino ${routine.letter}`;
+    }
+
+    /**
+     * Próxima letra/ID livres considerando rotinas E histórico. Uma letra
+     * usada por um treino antigo continua "ocupada": reutilizá-la faria um
+     * novo treino herdar registros do histórico de outro treino.
+     */
+    function nextRoutineLetter(routines, history) {
+        const used = new Set();
+        (Array.isArray(routines) ? routines : []).forEach(r => {
+            if (!r) return;
+            if (r.letter) used.add(String(r.letter).toUpperCase());
+        });
+        (Array.isArray(history) ? history : []).forEach(h => {
+            if (!h) return;
+            if (h.letter) used.add(String(h.letter).toUpperCase());
+            if (typeof h.routineId === 'string' && /^r[A-Z]$/i.test(h.routineId)) {
+                used.add(h.routineId.slice(1).toUpperCase());
+            }
+        });
+        for (let i = 0; i < 26; i++) {
+            const letter = String.fromCharCode(65 + i);
+            if (!used.has(letter)) return letter;
+        }
+        // Depois de Z não há letra: usa um número livre e mantém o ID único.
+        let n = 27;
+        while (used.has(String(n))) n++;
+        return String(n);
+    }
 
     function renderRoutines() {
         const container = document.getElementById('routines-container');
-        container.innerHTML = state.routines.map(r => `
-            <div class="routine-card" onclick="navigate('details', '${r.id}')">
-                <div class="routine-letter">${r.letter}</div>
-                <div class="routine-info">
-                    <h4>${r.name}</h4>
-                    <p>${r.exercises.length} exercícios</p>
+        container.innerHTML = state.routines.map(r => {
+            const safeId = TTUtils.escapeHtml(r.id);
+            const safeLetter = TTUtils.escapeHtml(r.letter);
+            const safeName = TTUtils.escapeHtml(routineDisplayName(r));
+            return `
+                <div class="routine-card" role="button" tabindex="0"
+                     data-routine-action="open" data-routine-id="${safeId}">
+                    <div class="routine-letter">${safeLetter}</div>
+                    <div class="routine-info">
+                        <h4>${safeName}</h4>
+                        <p>${r.exercises.length} exercícios</p>
+                    </div>
+                    <div class="routine-actions">
+                        <button class="btn btn-sm" type="button" title="Editar treino"
+                                data-routine-action="edit" data-routine-id="${safeId}">✎</button>
+                        <button class="btn btn-sm btn-minus" type="button" title="Excluir treino"
+                                data-routine-action="delete" data-routine-id="${safeId}">−</button>
+                    </div>
                 </div>
-                <div class="routine-actions">
-                    <button class="btn btn-sm" title="Editar treino" onclick="event.stopPropagation(); navigate('edit', '${r.id}')">✎</button>
-                    <button class="btn btn-sm btn-minus" title="Excluir treino" onclick="event.stopPropagation(); askDeleteRoutine('${r.id}')">−</button>
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
     function createNewRoutine() {
-        const nextLetter = String.fromCharCode(65 + state.routines.length);
+        const nextLetter = nextRoutineLetter(state.routines, state.history);
         const newId = 'r' + nextLetter;
-        state.routines.push({
-            id: newId, letter: nextLetter, name: 'Novo treino', exercises: []
-        });
-        Persistence.saveRoutines(state.routines);
+        const routine = {
+            id: newId, letter: nextLetter, name: `Treino ${nextLetter}`, exercises: []
+        };
+        // Grava ANTES de mostrar a edição: se o storage falhar, não abrimos uma
+        // rotina que só existe na memória como se tivesse sido criada.
+        const next = state.routines.concat([routine]);
+        if (!persistRoutines(next)) {
+            showToast('Não foi possível criar o treino.', 'error');
+            return;
+        }
+        state.routines = next;
         navigate('edit', newId);
     }
 
     function renderDetails(routineId) {
         state.editingRoutineId = routineId;
         const r = state.routines.find(x => x.id === routineId);
+        if (!r) {
+            showToast('Treino não encontrado.', 'error');
+            navigate('workouts');
+            return;
+        }
         document.getElementById('details-title').innerText = `Treino ${r.letter}`;
-        
+
+        // A letra continua sendo a identificação; o nome é uma camada extra.
+        // Quando o nome ainda é o padrão ("Treino A"), não repetimos o título.
+        const nameEl = document.getElementById('details-name');
+        const name = routineDisplayName(r);
+        const isDefault = name === `Treino ${r.letter}`;
+        nameEl.innerText = isDefault ? '' : name;
+        nameEl.hidden = isDefault;
+
         const container = document.getElementById('details-exercises-container');
         if (r.exercises.length === 0) {
             container.innerHTML = '<p class="text-muted" style="text-align:center; margin-top:20px;">Nenhum exercício adicionado.</p>';
@@ -875,9 +1351,9 @@
             return `
                 <div class="exercise-list-item">
                     <div style="font-weight: 700; color: var(--text-muted); width: 20px;">${idx + 1}</div>
-                    <img src="${cat.img}">
+                    <img src="${catalogText(cat.img)}" alt="">
                     <div class="info">
-                        <h4>${cat.name}</h4>
+                        <h4>${catalogText(cat.name)}</h4>
                         <p>${ex.sets} séries • ${ex.reps} reps • ${ex.weight} kg</p>
                     </div>
                 </div>
@@ -885,12 +1361,59 @@
         }).join('');
     }
 
+    /**
+     * Mantém `tempEditRoutine.name` sincronizado a cada digitação. O buffer é a
+     * fonte da verdade enquanto a edição não é salva; sem isso, ir ao catálogo
+     * ou configurar um exercício e voltar descartaria o nome digitado.
+     */
+    function updateRoutineName(value) {
+        if (!state.tempEditRoutine) return;
+        const clean = (typeof value === 'string' ? value : '').slice(0, 60);
+        state.tempEditRoutine.name = clean;
+        const input = document.getElementById('routine-name');
+        if (input && input.value !== clean) input.value = clean;
+    }
+
+    /** Repinta o campo de nome a partir do buffer (inclusive placeholder). */
+    function syncRoutineNameField() {
+        const input = document.getElementById('routine-name');
+        if (!input) return;
+        const t = state.tempEditRoutine;
+        input.value = t && typeof t.name === 'string' ? t.name.slice(0, 60) : '';
+        const table = (typeof translations !== 'undefined' && translations[state.lang]) || {};
+        if (table.routine_name_placeholder) input.placeholder = table.routine_name_placeholder;
+    }
+
+    /**
+     * Abre uma edição NOVA a partir do estado (`state.routines`): usada quando a
+     * navegação traz a rotina escolhida (lista, detalhes ou recém-criada).
+     */
     function startEditRoutine(routineId) {
         state.editingRoutineId = routineId;
         const r = state.routines.find(x => x.id === routineId);
         state.tempEditRoutine = JSON.parse(JSON.stringify(r));
         document.getElementById('edit-title').innerText = `Editar Treino ${r.letter}`;
+        syncRoutineNameField();
         renderEditList();
+    }
+
+    /**
+     * Redesenha a edição EM ANDAMENTO (`state.tempEditRoutine`) sem recopiar do
+     * estado. É o caso de voltar do catálogo (`addExerciseToRoutine`) ou de
+     * "Configurar exercício" (`saveExerciseConfig`): enquanto não houver
+     * `saveRoutineEdits()`, o buffer é a fonte da verdade da tela — o treino
+     * persistido só muda quando o usuário salva.
+     * Sem buffer (ou com buffer de OUTRA rotina) cai no caminho normal.
+     */
+    function showEditScreen() {
+        const t = state.tempEditRoutine;
+        if (t && t.id === state.editingRoutineId) {
+            document.getElementById('edit-title').innerText = `Editar Treino ${t.letter}`;
+            syncRoutineNameField();
+            renderEditList();
+            return;
+        }
+        startEditRoutine(state.editingRoutineId);
     }
 
     function renderEditList() {
@@ -906,9 +1429,9 @@
             const cat = catalogItem(ex.catalogId);
             return `
                 <div class="exercise-list-item">
-                    <img src="${cat.img}">
+                    <img src="${catalogText(cat.img)}" alt="">
                     <div class="info" onclick="navigate('config-exercise', ${idx})">
-                        <h4>${cat.name}</h4>
+                        <h4>${catalogText(cat.name)}</h4>
                         <p>${ex.sets} séries • ${ex.reps} reps • ${ex.weight} kg</p>
                     </div>
                     <div class="edit-controls">
@@ -937,8 +1460,24 @@
 
     function saveRoutineEdits() {
         const index = state.routines.findIndex(r => r.id === state.editingRoutineId);
-        state.routines[index] = JSON.parse(JSON.stringify(state.tempEditRoutine));
-        Persistence.saveRoutines(state.routines);
+        if (index === -1) {
+            showToast('Treino não encontrado.', 'error');
+            return;
+        }
+        // A lista é montada à parte e só substitui o estado DEPOIS da gravação:
+        // se o storage falhar, memória e disco seguem iguais e a falha aparece
+        // (nunca como um "salvo com sucesso" silencioso).
+        const draft = JSON.parse(JSON.stringify(state.tempEditRoutine));
+        const trimmedName = (typeof draft.name === 'string' ? draft.name : '').trim().slice(0, 60);
+        draft.name = trimmedName || `Treino ${draft.letter}`;
+        const next = state.routines.slice();
+        next[index] = draft;
+        if (!persistRoutines(next)) {
+            showToast('Não foi possível salvar o treino.', 'error');
+            return;
+        }
+        state.routines = next;
+        state.tempEditRoutine = draft;
         navigate('details', state.editingRoutineId);
     }
 
@@ -967,21 +1506,31 @@
         const container = document.getElementById('catalog-container');
         const query = document.getElementById('search-catalog').value || '';
 
-        const filtered = (typeof Catalog !== 'undefined')
+        const official = (typeof Catalog !== 'undefined')
             ? Catalog.search(query, state.catalogFilter)
             : mockCatalog.filter(c => {
                 const matchQuery = c.name.toLowerCase().includes(query.toLowerCase());
                 const matchFilter = state.catalogFilter === 'all' || c.muscle === state.catalogFilter;
                 return matchQuery && matchFilter;
             });
+        // Oficiais primeiro; personalizados depois; ambos no mesmo filtro/busca.
+        const filtered = (typeof CustomCatalog !== 'undefined')
+            ? CustomCatalog.search(official, state.customExercises, query, state.catalogFilter, catalogImage)
+            : official;
 
-        container.innerHTML = filtered.map(c => `
-            <div class="catalog-item">
-                <img src="${c.img}">
-                <div class="info"><h4>${c.name}</h4><p>${muscleLabel(c)}</p></div>
-                <button class="btn-add-circle" onclick="addExerciseToRoutine('${c.id}')">+</button>
-            </div>
-        `).join('');
+        container.innerHTML = filtered.map(c => {
+            const badge = c.custom
+                ? `<span class="custom-badge" data-i18n="custom_badge">${catalogText(I18n.t('custom_badge'))}</span>`
+                : '';
+            const addLabel = catalogText(interpolateName(I18n.t('add_exercise_aria'), c.name));
+            return `
+                <div class="catalog-item${c.custom ? ' catalog-item-custom' : ''}">
+                    <img src="${catalogText(c.img)}" alt="">
+                    <div class="info"><h4>${catalogText(c.name)}${badge}</h4><p>${catalogText(muscleLabel(c))}</p></div>
+                    <button type="button" class="btn-add-circle" aria-label="${addLabel}" data-catalog-id="${catalogText(c.id)}">+</button>
+                </div>
+            `;
+        }).join('');
     }
 
     function filterCatalog(muscle) {
@@ -994,6 +1543,500 @@
             catalogId: catalogId, sets: 3, reps: 10, weight: 20, rest: 60
         });
         navigate('edit');
+    }
+
+    // ================= SPRINT 5.2.1: NOVO EXERCÍCIO PERSONALIZADO =================
+
+    /** Mensagem localizada para um motivo do domínio/gravação. */
+    function customExerciseMessage(reason) {
+        const keys = {
+            'name-required': 'custom_error_name_required',
+            'name-too-long': 'custom_error_name_too_long',
+            'name-duplicate-official': 'custom_error_name_duplicate_official',
+            'name-duplicate-custom': 'custom_error_name_duplicate_custom',
+            'muscle-required': 'custom_error_muscle_required',
+            'muscle-invalid': 'custom_error_muscle_invalid',
+            'save-error': 'custom_exercise_save_error',
+            'unavailable': 'custom_exercise_unavailable',
+            'not-found': 'custom_error_not_found'
+        };
+        return I18n.t(keys[reason] || 'custom_exercise_unavailable');
+    }
+
+    function customExerciseErrorField(reason) {
+        if (!reason) return null;
+        if (reason.indexOf('name-') === 0) return 'name';
+        if (reason.indexOf('muscle-') === 0) return 'muscle';
+        return null;
+    }
+
+    /** Normaliza o contrato de gravação (objeto novo ou booleano legado). */
+    function customExerciseSaveStatus(saveResult) {
+        if (saveResult === true) return 'saved';
+        if (!saveResult || typeof saveResult !== 'object') return 'failed';
+        if (typeof saveResult.status === 'string') return saveResult.status;
+        return saveResult.ok === true ? 'saved' : 'failed';
+    }
+
+    /** Lista efetivamente aceita pelo armazenamento, com fallback compatível. */
+    function customExerciseAcceptedList(saveResult, fallback) {
+        if (saveResult && Array.isArray(saveResult.stored)) return saveResult.stored;
+        return fallback;
+    }
+
+    /** Mostra/limpa o alerta e marca o campo inválido (aria-invalid). */
+    function setCustomExerciseError(reason, focusField) {
+        customExerciseErrorReason = reason || null;
+        const box = document.getElementById('custom-exercise-error');
+        const name = document.getElementById('custom-exercise-name');
+        const muscle = document.getElementById('custom-exercise-muscle');
+
+        if (box) {
+            box.innerText = reason ? customExerciseMessage(reason) : '';
+            box.classList.toggle('show', !!reason);
+        }
+
+        const field = customExerciseErrorField(reason);
+        if (name) name.setAttribute('aria-invalid', field === 'name' ? 'true' : 'false');
+        if (muscle) muscle.setAttribute('aria-invalid', field === 'muscle' ? 'true' : 'false');
+
+        if (focusField && field) {
+            const target = field === 'name' ? name : muscle;
+            if (target) target.focus();
+        }
+    }
+
+    function fillCustomExerciseGroups(selected) {
+        const select = document.getElementById('custom-exercise-muscle');
+        if (!select) return;
+        const groups = (typeof Catalog !== 'undefined') ? Catalog.groups() : [];
+        select.innerHTML = '<option value="">' + catalogText(I18n.t('muscle_group_placeholder')) + '</option>' +
+            groups.map(g => `<option value="${catalogText(g)}">${catalogText(g)}</option>`).join('');
+        if (selected && groups.indexOf(selected) !== -1) select.value = selected;
+    }
+
+    /** Exercício personalizado em edição (ou null quando é criação). */
+    function customExerciseBeingEdited() {
+        if (!state.editingCustomExerciseId) return null;
+        return (typeof CustomExercises !== 'undefined' && typeof CustomExercises.findById === 'function')
+            ? CustomExercises.findById(state.customExercises, state.editingCustomExerciseId)
+            : null;
+    }
+
+    /** Título e botão do formulário refletem criação x edição. */
+    function syncCustomExerciseFormMode() {
+        const editing = !!state.editingCustomExerciseId;
+        const title = document.getElementById('custom-exercise-title');
+        const save = document.getElementById('btn-save-custom-exercise');
+        if (title) {
+            const key = editing ? 'edit_exercise_title' : 'new_exercise_title';
+            title.setAttribute('data-i18n', key);
+            title.innerText = I18n.t(key);
+        }
+        if (save) {
+            const key = editing ? 'save_exercise' : 'create_exercise';
+            save.setAttribute('data-i18n', key);
+            save.innerText = I18n.t(key);
+        }
+    }
+
+    /** Abre o formulário limpo, com os grupos oficiais e foco no nome. */
+    function renderCustomExerciseForm() {
+        const name = document.getElementById('custom-exercise-name');
+        const select = document.getElementById('custom-exercise-muscle');
+        if (!name || !select) return;
+
+        const editing = customExerciseBeingEdited();
+        if (state.editingCustomExerciseId && !editing) {
+            state.editingCustomExerciseId = null;
+            state.customExerciseReturnScreen = 'custom-exercises';
+            customExerciseReturnFocus = null;
+            setCustomExercisesScreenError('not-found');
+            navigate('custom-exercises');
+            focusCustomExercisesTitle();
+            return;
+        }
+
+        setCustomExerciseError(null);
+        name.value = editing ? editing.name : '';
+        fillCustomExerciseGroups(editing ? editing.muscle : '');
+        name.placeholder = I18n.t('exercise_name_placeholder');
+        syncCustomExerciseFormMode();
+        name.focus();
+    }
+
+    /** Mantém placeholder/opções/mensagem no idioma ativo sem apagar a entrada. */
+    function refreshCustomExerciseTranslations() {
+        const name = document.getElementById('custom-exercise-name');
+        const select = document.getElementById('custom-exercise-muscle');
+        if (!name || !select) return;
+        name.placeholder = I18n.t('exercise_name_placeholder');
+        fillCustomExerciseGroups(select.value);
+        syncCustomExerciseFormMode();
+        if (customExerciseErrorReason) {
+            const box = document.getElementById('custom-exercise-error');
+            if (box) box.innerText = customExerciseMessage(customExerciseErrorReason);
+        }
+    }
+
+    function clearCustomExerciseError() {
+        if (customExerciseErrorReason) setCustomExerciseError(null);
+    }
+
+    // ----- Gerenciamento (Fase 4): lista, edição e exclusão -----
+
+    function focusCustomExercisesTitle() {
+        const title = document.getElementById('custom-exercises-title');
+        if (title && typeof title.focus === 'function') title.focus();
+    }
+
+    /** Guarda o acionador antes de sair da tela; ele pode ser removido no retorno. */
+    function rememberCustomExerciseFocus() {
+        const active = document.activeElement;
+        customExerciseReturnFocus = isUsableFocusTarget(active) ? active : null;
+    }
+
+    /**
+     * Devolve o foco ao acionador quando ele ainda é válido. Se a renderização
+     * da lista o removeu, usa o título da listagem ou o botão de criação como
+     * destino lógico. O roteador não disputa o foco: quem chama decide o alvo.
+     */
+    function restoreCustomExerciseFocus(targetScreen) {
+        const opener = customExerciseReturnFocus;
+        customExerciseReturnFocus = null;
+        if (isUsableFocusTarget(opener)) {
+            opener.focus();
+            return true;
+        }
+        if (targetScreen === 'custom-exercises') {
+            focusCustomExercisesTitle();
+            return true;
+        }
+        const newButton = document.getElementById('btn-new-custom-exercise');
+        if (isUsableFocusTarget(newButton)) {
+            newButton.focus();
+            return true;
+        }
+        return focusFallbackForScreen();
+    }
+
+    /** Abre o formulário em modo criação, lembrando de qual tela voltar. */
+    function openCustomExerciseCreate(returnScreen) {
+        rememberCustomExerciseFocus();
+        state.editingCustomExerciseId = null;
+        state.customExerciseReturnScreen = returnScreen === 'custom-exercises' ? 'custom-exercises' : 'add-exercise';
+        clearCustomExercisesScreenError();
+        navigate('add-custom-exercise');
+    }
+
+    /** Abre o formulário em modo edição do personalizado informado. */
+    function openCustomExerciseEdit(id) {
+        rememberCustomExerciseFocus();
+        state.editingCustomExerciseId = id || null;
+        state.customExerciseReturnScreen = 'custom-exercises';
+        clearCustomExercisesScreenError();
+        navigate('add-custom-exercise');
+    }
+
+    /** Abre a tela “Meus exercícios” e posiciona o foco no título. */
+    function openCustomExerciseManager() {
+        const active = document.activeElement;
+        customExerciseManagerReturnFocus = isUsableFocusTarget(active) ? active : null;
+        clearCustomExercisesScreenError();
+        navigate('custom-exercises');
+        focusCustomExercisesTitle();
+    }
+
+    /**
+     * Volta do gerenciador para a seleção de exercícios devolvendo o foco ao
+     * botão que abriu a tela. Se ele não existir mais (ou não puder receber
+     * foco), usa os mesmos fallbacks acessíveis do restante do fluxo.
+     */
+    function closeCustomExerciseManager() {
+        const opener = customExerciseManagerReturnFocus;
+        customExerciseManagerReturnFocus = null;
+        navigate('add-exercise');
+        if (isUsableFocusTarget(opener)) {
+            opener.focus();
+            return true;
+        }
+        const manageButton = document.getElementById('btn-manage-custom-exercises');
+        if (isUsableFocusTarget(manageButton)) {
+            manageButton.focus();
+            return true;
+        }
+        const newButton = document.getElementById('btn-new-custom-exercise');
+        if (isUsableFocusTarget(newButton)) {
+            newButton.focus();
+            return true;
+        }
+        return focusFallbackForScreen();
+    }
+
+    /** Sai do formulário voltando para a tela de origem (seleção ou lista). */
+    function closeCustomExerciseForm() {
+        const target = state.customExerciseReturnScreen === 'custom-exercises' ? 'custom-exercises' : 'add-exercise';
+        state.editingCustomExerciseId = null;
+        state.customExerciseReturnScreen = 'add-exercise';
+        navigate(target);
+        restoreCustomExerciseFocus(target);
+    }
+
+    function setCustomExercisesScreenError(reason, exerciseName, focus) {
+        customExercisesErrorReason = reason || null;
+        customExercisesErrorName = exerciseName || '';
+        const box = document.getElementById('custom-exercises-error');
+        if (!box) return;
+
+        let message = '';
+        if (reason === 'in-use') {
+            message = interpolateName(I18n.t('custom_error_in_use'), customExercisesErrorName);
+        } else if (reason === 'not-found') {
+            message = I18n.t('custom_error_not_found');
+        } else if (reason === 'delete-error') {
+            message = I18n.t('custom_exercise_delete_error');
+        }
+
+        box.innerText = message;
+        box.classList.toggle('show', !!message);
+        if (message && focus !== false) box.focus();
+    }
+
+    function clearCustomExercisesScreenError() {
+        customExercisesErrorReason = null;
+        customExercisesErrorName = '';
+        const box = document.getElementById('custom-exercises-error');
+        if (!box) return;
+        box.innerText = '';
+        box.classList.remove('show');
+    }
+
+    /**
+     * A-07: o estado vazio é uma região de status FORA da lista. Assim a lista
+     * mantém apenas itens reais e a mensagem não vira um item fictício.
+     * Só atualiza o texto quando ele muda para não repetir o anúncio.
+     */
+    function setCustomExercisesEmptyState(message) {
+        const empty = document.getElementById('custom-exercises-empty');
+        if (!empty) return;
+        const text = message ? String(message) : '';
+        if (empty.textContent !== text) empty.textContent = text;
+        empty.hidden = !text;
+    }
+
+    /** Desenha a lista de personalizados com ações acessíveis. */
+    function renderCustomExercisesScreen() {
+        const container = document.getElementById('custom-exercises-list');
+        if (!container) return;
+        const items = (Array.isArray(state.customExercises) ? state.customExercises : [])
+            .filter((ex) => ex && typeof CustomExercises !== 'undefined' &&
+                typeof CustomExercises.isValidId === 'function' && CustomExercises.isValidId(ex.id));
+
+        if (!items.length) {
+            container.innerHTML = '';
+            setCustomExercisesEmptyState(I18n.t('custom_exercises_empty'));
+            return;
+        }
+
+        container.innerHTML = items.map((ex) => {
+            const name = catalogText(ex.name);
+            const muscle = catalogText(ex.muscle);
+            const editLabel = catalogText(interpolateName(I18n.t('edit_custom_exercise_aria'), ex.name));
+            const deleteLabel = catalogText(interpolateName(I18n.t('delete_custom_exercise_aria'), ex.name));
+            const badge = '<span class="custom-badge" data-i18n="custom_badge">' +
+                catalogText(I18n.t('custom_badge')) + '</span>';
+            return `
+                <div class="custom-manage-item" role="listitem" data-custom-id="${catalogText(ex.id)}">
+                    <img src="${catalogText(catalogImage(ex.muscle))}" alt="">
+                    <div class="info"><h4>${name}${badge}</h4><p>${muscle}</p></div>
+                    <div class="custom-manage-actions">
+                        <button type="button" class="btn custom-manage-edit" data-custom-id="${catalogText(ex.id)}"
+                                data-custom-action="edit"
+                                aria-label="${editLabel}" data-i18n="edit">${catalogText(I18n.t('edit'))}</button>
+                        <button type="button" class="btn custom-manage-delete" data-custom-id="${catalogText(ex.id)}"
+                                data-custom-action="delete"
+                                aria-label="${deleteLabel}" data-i18n="delete">${catalogText(I18n.t('delete'))}</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        setCustomExercisesEmptyState('');
+    }
+
+    /** Redesenha a lista no idioma ativo quando a tela está aberta. */
+    function refreshCustomExercisesManagementTranslations() {
+        if (state.currentScreen !== 'custom-exercises') return;
+        renderCustomExercisesScreen();
+        if (customExercisesErrorReason) {
+            setCustomExercisesScreenError(customExercisesErrorReason, customExercisesErrorName, false);
+        }
+    }
+
+    function customExerciseUsageOptions() {
+        return {
+            routines: Array.isArray(state.routines) ? state.routines : [],
+            tempRoutine: state.tempEditRoutine || null,
+            session: state.session || null
+        };
+    }
+
+    function customExerciseById(id) {
+        return (typeof CustomExercises !== 'undefined' && typeof CustomExercises.findById === 'function')
+            ? CustomExercises.findById(state.customExercises, id)
+            : null;
+    }
+
+    /** Pré-checa o uso e só então pede confirmação para excluir. */
+    function askDeleteCustomExercise(id) {
+        clearCustomExercisesScreenError();
+        const exercise = customExerciseById(id);
+        if (!exercise) {
+            setCustomExercisesScreenError('not-found');
+            return;
+        }
+        if (typeof CustomExercises === 'undefined' || typeof CustomExercises.usageReport !== 'function') {
+            setCustomExercisesScreenError('delete-error');
+            return;
+        }
+
+        const usage = CustomExercises.usageReport(id, customExerciseUsageOptions());
+        if (usage && usage.used) {
+            setCustomExercisesScreenError('in-use', exercise.name);
+            return;
+        }
+
+        showConfirm(
+            I18n.t('delete_custom_exercise_title'),
+            interpolateName(I18n.t('delete_custom_exercise_desc'), exercise.name),
+            () => deleteCustomExercise(id)
+        );
+    }
+
+    /**
+     * Exclui com bloqueio de uso: revalida no domínio, grava antes de atualizar
+     * o estado e, em falha, preserva a lista e anuncia o motivo.
+     */
+    function deleteCustomExercise(id) {
+        clearCustomExercisesScreenError();
+        const exercise = customExerciseById(id);
+        if (!exercise) {
+            setCustomExercisesScreenError('not-found');
+            return false;
+        }
+        if (typeof CustomExercises === 'undefined' || typeof CustomExercises.remove !== 'function') {
+            setCustomExercisesScreenError('delete-error');
+            return false;
+        }
+
+        const result = CustomExercises.remove(state.customExercises, id, customExerciseUsageOptions());
+        if (!result.ok) {
+            const reason = result.reason === 'in-use' ? 'in-use'
+                : (result.reason === 'not-found' ? 'not-found' : 'delete-error');
+            setCustomExercisesScreenError(reason, exercise.name);
+            return false;
+        }
+
+        // Persistir ANTES de atualizar o estado ou confirmar sucesso.
+        if (typeof Persistence === 'undefined' ||
+            typeof Persistence.saveCustomExercises !== 'function') {
+            setCustomExercisesScreenError('delete-error');
+            return false;
+        }
+
+        const saveResult = Persistence.saveCustomExercises(result.list);
+        const saveStatus = customExerciseSaveStatus(saveResult);
+        if (saveStatus !== 'saved' && saveStatus !== 'normalized' && saveStatus !== 'memory') {
+            setCustomExercisesScreenError('delete-error');
+            return false;
+        }
+
+        // A lista aceita pelo armazenamento é a fonte da verdade do estado.
+        state.customExercises = customExerciseAcceptedList(saveResult, result.list);
+        if (state.editingCustomExerciseId === id) {
+            state.editingCustomExerciseId = null;
+            state.customExerciseReturnScreen = 'custom-exercises';
+        }
+        if (saveStatus === 'saved') {
+            showToast(I18n.t('custom_exercise_deleted'), 'success');
+        } else if (saveStatus === 'normalized') {
+            showToast(I18n.t('custom_exercise_partial_save'), 'error');
+        } else {
+            showToast(I18n.t('custom_exercise_memory_only'), 'error');
+        }
+        renderCustomExercisesScreen();
+        const newBtn = document.getElementById('btn-manage-new-custom-exercise');
+        if (newBtn) newBtn.focus();
+        return true;
+    }
+
+    /**
+     * Cria ou edita o exercício: valida no DOMÍNIO (nome, grupo e duplicidade
+     * global), grava primeiro e só então atualiza o estado. Em falha, o
+     * formulário fica intacto e o motivo é anunciado na região viva.
+     */
+    function createCustomExercise() {
+        const nameInput = document.getElementById('custom-exercise-name');
+        const muscleInput = document.getElementById('custom-exercise-muscle');
+        if (!nameInput || !muscleInput) return false;
+
+        const isEditing = !!state.editingCustomExerciseId;
+        const canCreate = typeof CustomExercises !== 'undefined' && typeof CustomExercises.create === 'function';
+        const canUpdate = typeof CustomExercises !== 'undefined' && typeof CustomExercises.update === 'function';
+        if (!canCreate || (isEditing && !canUpdate)) {
+            setCustomExerciseError('unavailable', false);
+            return false;
+        }
+
+        const officialNames = (typeof Catalog !== 'undefined' && typeof Catalog.all === 'function')
+            ? Catalog.all() : [];
+        const groups = (typeof Catalog !== 'undefined' && typeof Catalog.groups === 'function')
+            ? Catalog.groups() : [];
+        const payload = { name: nameInput.value, muscle: muscleInput.value };
+        const result = isEditing
+            ? CustomExercises.update(state.customExercises, state.editingCustomExerciseId, payload,
+                { officialNames: officialNames, groups: groups })
+            : CustomExercises.create(Array.isArray(state.customExercises) ? state.customExercises : [],
+                payload, { officialNames: officialNames, groups: groups });
+
+        if (!result.ok) {
+            setCustomExerciseError(result.reason, true);
+            return false;
+        }
+
+        // Persistir ANTES de atualizar o estado ou confirmar sucesso.
+        if (typeof Persistence === 'undefined' ||
+            typeof Persistence.saveCustomExercises !== 'function') {
+            setCustomExerciseError('save-error', false);
+            return false;
+        }
+
+        const saveResult = Persistence.saveCustomExercises(result.list);
+        const saveStatus = customExerciseSaveStatus(saveResult);
+        if (saveStatus !== 'saved' && saveStatus !== 'normalized' && saveStatus !== 'memory') {
+            setCustomExerciseError('save-error', false);
+            return false;
+        }
+
+        const target = isEditing ? 'custom-exercises'
+            : (state.customExerciseReturnScreen === 'custom-exercises' ? 'custom-exercises' : 'add-exercise');
+        // Usa sempre a lista aceita pelo armazenamento: nunca uma lista maior
+        // do que aquilo que a persistência realmente preservou.
+        state.customExercises = customExerciseAcceptedList(saveResult, result.list);
+        setCustomExerciseError(null);
+        const form = document.getElementById('custom-exercise-form');
+        if (form) form.reset();
+        state.editingCustomExerciseId = null;
+        state.customExerciseReturnScreen = 'add-exercise';
+        if (saveStatus === 'saved') {
+            showToast(I18n.t(isEditing ? 'custom_exercise_updated' : 'custom_exercise_created'), 'success');
+        } else if (saveStatus === 'normalized') {
+            showToast(I18n.t('custom_exercise_partial_save'), 'error');
+        } else {
+            showToast(I18n.t('custom_exercise_memory_only'), 'error');
+        }
+        navigate(target);
+        restoreCustomExerciseFocus(target);
+        return true;
     }
 
     function renderConfigExercise(index) {
@@ -1038,34 +2081,71 @@
             const cat = catalogItem(ex.catalogId);
             return `<div class="exercise-list-item" style="padding: 8px;">
                 <div style="font-weight:700; color:var(--text-muted); width:20px;">${idx+1}</div>
-                <div class="info"><h4>${cat.name}</h4><p>${ex.sets}x${ex.reps} • ${ex.weight}kg</p></div>
+                <div class="info"><h4>${catalogText(cat.name)}</h4><p>${ex.sets}x${ex.reps} • ${ex.weight}kg</p></div>
             </div>`;
         }).join('');
     }
 
+    // ================= LÓGICA: TELA ACESA (Sprint 4 / E4) =================
+    // A tela acesa só faz sentido com um treino ATIVO no Player. Toda a
+    // conversa com `navigator.wakeLock` vive em js/wake-lock.js (adaptador):
+    // aqui só se declara a INTENÇÃO, em contexto de ação do usuário.
+    // Sem o módulo (script antigo) ou sem suporte/rejeição do navegador, o
+    // treino segue normalmente — nunca lança daqui para cima.
+    function syncWakeLock(shouldHold, reason) {
+        if (typeof WakeLock === 'undefined' || !WakeLock) return;
+        try {
+            const out = WakeLock.setEnabled(shouldHold, reason || 'player');
+            if (out && typeof out.catch === 'function') {
+                out.catch(err => console.warn('[WakeLock] bloqueio de tela indisponível:', err));
+            }
+        } catch (err) {
+            console.warn('[WakeLock] bloqueio de tela indisponível:', err);
+        }
+    }
+
+    // ================= LÓGICA: BLINDAGEM DE TOQUE DUPLO (Sprint 4 / E6) =================
+    // Dois toques em milissegundos na MESMA intenção são um toque acidental:
+    // "Concluir Série" registraria DUAS séries (a segunda com os mesmos valores)
+    // e o alternador do header pausaria E retomaria em sequência. A cerca é uma
+    // JANELA por INTENÇÃO (`ActionGuard`, puro e testável, em js/action-guard.js):
+    // a repetição dentro da janela é ignorada em SILÊNCIO (não é erro do usuário
+    // — o primeiro toque já valeu) e a janela NUNCA fica presa.
+    // Só as intenções com DANO REAL são blindadas; os outros caminhos já são
+    // idempotentes por contrato (fim do treino deduplica por `sessionId`,
+    // saída/descarte zeram a sessão e "Pular Descanso" só fecha o que está aberto).
+    const TAP_WINDOW_MS = 400;
+    const tapGuard = ActionGuard.create(TAP_WINDOW_MS);
+
+    /** Chave da blindagem: a INTENÇÃO da UI + a execução atual (não vaza entre treinos). */
+    function tapKey(intent) {
+        return intent + ':' + (state.session ? state.session.id : 'sem-sessao');
+    }
+
     function startWorkoutSession() {
         const routine = state.routines.find(x => x.id === state.editingRoutineId);
-        
-        state.session = {
-            routineId: routine.id,
-            routineName: routine.name,
-            letter: routine.letter,
-            currentExerciseIndex: 0,
-            currentSetIndex: 1,
-            exercises: routine.exercises.map(ex => {
-                const cat = catalogItem(ex.catalogId);
-                return {
-                    ...ex,
-                    name: cat.name, muscle: cat.muscle, img: cat.img,
-                    actualWeight: ex.weight,
-                    actualReps: ex.reps,
-                    setsCompleted: 0,
-                    completedSets: []
-                };
-            }),
-            isFinished: false,
-            startedAt: new Date()
-        };
+
+        // E6: execução nova -> janelas novas. As chaves já são por sessão; o
+        // reset é cinto de segurança (e mantém o mapa da blindagem pequeno).
+        tapGuard.reset();
+
+        // Já existe treino em andamento: NÃO sobrescreve (perderia o progresso).
+        // Reoferece retomar/descartar, fechando o ciclo com o convite do boot.
+        if (state.session) {
+            showResumePrompt();
+            return;
+        }
+
+        // Sessão criada pelo DOMÍNIO (js/workout-session.js) e persistida pelo
+        // CONTROLADOR. `catalogItem` entra como `resolve`, preservando
+        // nome/músculo/imagem do catálogo real.
+        const result = WorkoutController.start(routine, catalogItem, new Date());
+        if (!result.ok) {
+            showToast(result.message || 'Não foi possível iniciar o treino.', 'error');
+            return;
+        }
+        state.session = result.session;
+        sessionPendingDecision = false;
 
         // Reseta o toggle para ligado ao iniciar um novo treino (opcional, mas boa prática)
         state.autoRestEnabled = true;
@@ -1073,12 +2153,136 @@
 
         navigate('player');
         updatePlayerUI();
+        // Treino ativo no Player: pede a tela acesa na MESMA ação do usuário
+        // que iniciou o treino (contexto exigido pelo navegador).
+        syncWakeLock(true, 'start');
     }
 
     // FUNÇÃO DO TOGGLE
     function toggleAutoRest() {
         state.autoRestEnabled = document.getElementById('toggle-auto-rest').checked;
         Persistence.saveAutoRest(state.autoRestEnabled);
+    }
+
+    // ================= ACESSIBILIDADE DO PLAYER (Sprint 4 / E7) =================
+
+    /**
+     * Nome acessível de controles cujo TEXTO visível é um símbolo (`+15s`, `✕`).
+     * As frases vêm do i18n (pt/en/es) por meio de `data-i18n-aria-label`, sem
+     * tocar no texto visível — o mecanismo normal (`data-i18n`) continua sendo o
+     * dono do que se vê; aqui só completamos o nome para leitores de tela.
+     */
+    function applyPlayerA11yLabels() {
+        const table = translations[state.lang] || {};
+        document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+            const key = el.getAttribute('data-i18n-aria-label');
+            if (table[key]) el.setAttribute('aria-label', table[key]);
+        });
+    }
+
+    /**
+     * Anuncia na região viva (`#player-status`, role=status/aria-live=polite)
+     * APENAS eventos discretos: pausa, retomada, série concluída e descanso
+     * concluído. Nada de chamar isto no ticker — o descanso muda 4x/s e um
+     * anúncio por tick seria ruído puro.
+     */
+    function announcePlayer(message) {
+        const el = document.getElementById('player-status');
+        if (el && message) el.innerText = message;
+    }
+
+    // ================= DESCANSO PRESCRITO (Sprint 5.3 / Inc. 2) =================
+    // Configuração do exercício atual, exibida abaixo de "Descanso Automático".
+    // NÃO é o timer em execução: `adjustRestTime` (±15s) continua sendo o único
+    // caminho que altera o descanso efêmero do overlay.
+    const PRESCRIBED_REST_MIN = 30;      // 00:30
+    const PRESCRIBED_REST_MAX = 3570;    // 59:30
+    const PRESCRIBED_REST_STEP = 30;
+
+    /** Formata segundos em MM:SS (minutos podem passar de 59 em dados legados). */
+    function formatRestMMSS(seconds) {
+        const total = Math.max(0, Math.round(Number(seconds) || 0));
+        const minutes = Math.floor(total / 60);
+        const secs = total % 60;
+        return String(minutes).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+    }
+
+    /**
+     * Próximo valor prescrito. `rest = 0` significa "sem descanso" e NÃO é
+     * convertido em 30 automaticamente: de zero, `+` define o mínimo e `−`
+     * permanece em zero. Valores legados positivos fora da faixa são exibidos
+     * como estão e só são normalizados no primeiro ajuste (sem migração).
+     */
+    function nextPrescribedRest(current, delta) {
+        const value = Math.max(0, Math.round(Number(current) || 0));
+        const step = Math.round(Number(delta) || 0);
+        if (value === 0) return step > 0 ? PRESCRIBED_REST_MIN : 0;
+        const target = value + step;
+        if (target < PRESCRIBED_REST_MIN) return PRESCRIBED_REST_MIN;
+        if (target > PRESCRIBED_REST_MAX) return PRESCRIBED_REST_MAX;
+        return target;
+    }
+
+    /**
+     * Índice do exercício correspondente na rotina de origem da sessão.
+     * Prefere a mesma posição (a sessão nasce na ordem da rotina) e valida pelo
+     * `catalogId`; se a posição não bater, procura o primeiro id igual.
+     */
+    function routineExerciseIndexFor(routine, sessionExercise, sessionIndex) {
+        const list = routine && Array.isArray(routine.exercises) ? routine.exercises : [];
+        if (!list.length) return -1;
+        const catalogId = sessionExercise ? String(sessionExercise.catalogId || '') : '';
+        if (!catalogId) {
+            return sessionIndex >= 0 && sessionIndex < list.length ? sessionIndex : -1;
+        }
+        if (sessionIndex >= 0 && sessionIndex < list.length) {
+            const sameIndex = list[sessionIndex];
+            if (sameIndex && String(sameIndex.catalogId || '') === catalogId) return sessionIndex;
+        }
+        return list.findIndex(raw => raw && String(raw.catalogId || '') === catalogId);
+    }
+
+    /**
+     * Ajusta o descanso PRESCRITO do exercício atual em passos de 30 s.
+     * Persiste a sessão em andamento e a rotina de origem. Não toca no timer
+     * em execução (nem no toggle de descanso automático).
+     */
+    function adjustPrescribedRest(deltaSeconds) {
+        if (!state.session) return false;
+        const s = state.session;
+        const ex = s.exercises[s.currentExerciseIndex];
+        if (!ex) return false;
+
+        const previous = Math.max(0, Math.round(Number(ex.rest) || 0));
+        const next = nextPrescribedRest(previous, deltaSeconds);
+        if (next === previous) {
+            updatePlayerUI();
+            return false;
+        }
+
+        const routine = state.routines.find(r => r.id === s.routineId);
+        const routineIndex = routineExerciseIndexFor(routine, ex, s.currentExerciseIndex);
+        const previousRoutineRest = routineIndex >= 0 ? routine.exercises[routineIndex].rest : null;
+
+        // Aplica em memória, persiste os dois donos do dado e, se algo falhar,
+        // devolve o estado anterior (nada de "salvo" silencioso).
+        ex.rest = next;
+        if (routineIndex >= 0) routine.exercises[routineIndex].rest = next;
+
+        const sessionSaved = WorkoutController.save(s).ok;
+        const routinesSaved = routineIndex < 0 ? true : persistRoutines(state.routines);
+        if (!sessionSaved || !routinesSaved) {
+            ex.rest = previous;
+            if (routineIndex >= 0) routine.exercises[routineIndex].rest = previousRoutineRest;
+            if (sessionSaved) WorkoutController.save(s);
+            if (routinesSaved && routineIndex >= 0) persistRoutines(state.routines);
+            showToast(translations[state.lang].rest_config_save_error, 'error');
+            updatePlayerUI();
+            return false;
+        }
+
+        updatePlayerUI();
+        return true;
     }
 
     function updatePlayerUI() {
@@ -1117,16 +2321,32 @@
         document.getElementById('player-actual-reps').innerText = ex.actualReps;
         
         document.getElementById('player-set-info').innerText = `Série ${s.currentSetIndex} de ${ex.sets}`;
-        document.getElementById('player-rest-time').innerText = `Descanso: ${ex.rest}s`;
+        const restConfig = document.getElementById('player-rest-config');
+        if (restConfig) restConfig.innerText = formatRestMMSS(ex.rest);
 
         document.getElementById('btn-prev-ex').style.opacity = s.currentExerciseIndex === 0 ? '0.5' : '1';
         document.getElementById('btn-next-ex').style.opacity = s.currentExerciseIndex === s.exercises.length - 1 ? '0.5' : '1';
 
+        // Sprint 4 / E5: o rótulo do botão de pausa e o CTA principal espelham
+        // o ESTADO REAL da sessão (`status` é a fonte única — nada é copiado
+        // para uma variável de UI).
+        const paused = s.status === 'paused';
+        const btnPause = document.getElementById('btn-pause-resume');
+        btnPause.setAttribute('data-i18n', paused ? 'resume_workout' : 'pause_workout');
+
         if (s.isFinished) {
             document.getElementById('btn-complete-set').innerHTML = `<span data-i18n="finish_workout">FINALIZAR TREINO</span>`;
+        } else if (paused) {
+            // Pausado, o CTA informa o estado; tocar nele mostra a recusa do
+            // controlador (o domínio é quem manda).
+            document.getElementById('btn-complete-set').innerHTML = `<span data-i18n="workout_paused">Treino pausado</span>`;
         } else {
             document.getElementById('btn-complete-set').innerHTML = `<span data-i18n="complete_set">✓ CONCLUIR SÉRIE</span>`;
         }
+        document.getElementById('btn-complete-set').style.opacity = paused ? '0.6' : '1';
+        // Pausado ou encerrado não há o que pausar: o botão fica esmaecido
+        // (a recusa real, quando o usuário insiste, vem do controlador).
+        btnPause.style.opacity = (paused || s.isFinished) ? '0.6' : '1';
         
         document.querySelectorAll('#screen-player [data-i18n]').forEach(el => {
             const key = el.getAttribute('data-i18n');
@@ -1139,109 +2359,352 @@
         const ex = state.session.exercises[state.session.currentExerciseIndex];
         if (field === 'weight') ex.actualWeight = Math.max(0, ex.actualWeight + amount);
         if (field === 'reps') ex.actualReps = Math.max(1, ex.actualReps + amount);
+        // Sprint 4: o ajuste faz parte do progresso -> persiste junto.
+        WorkoutController.save(state.session);
         updatePlayerUI();
     }
 
     function completeSet() {
         const s = state.session;
-        if (s.isFinished) {
+        if (!s) return;
+
+        // Treino já concluído: este toque CONFIRMA o registro no histórico.
+        if (s.status === 'finished' || s.isFinished) {
+            // E6: o botão trocou de INTENÇÃO (agora é confirmar) — a blindagem é
+            // própria, porque o toque duplo aqui repetiria a gravação.
+            if (!tapGuard.accept(tapKey('finish-confirm'), new Date())) return;
+            // Sessão encerrada: não há mais motivo para manter a tela acesa
+            // nem descanso em tela (fecha o ticker — sem vazamento).
+            syncWakeLock(false, 'finished');
+            closeRestOverlay();
             saveSessionToHistory('completed');
             state.session = null;
+            sessionPendingDecision = false;
             navigate('home');
             return;
         }
 
-        const ex = s.exercises[s.currentExerciseIndex];
+        // E6: dois toques em milissegundos registrariam DUAS séries (a segunda
+        // com os mesmos valores), avançando o índice sem ninguém ter treinado.
+        if (!tapGuard.accept(tapKey('complete-set'), new Date())) return;
+
+        const before = { ex: s.currentExerciseIndex, set: s.currentSetIndex };
+        const current = s.exercises[before.ex];
+        if (!current) return;
 
         // Registra a série EFETIVAMENTE concluída (carga/reps reais do momento).
-        // Séries pendentes nunca contam como concluídas (Fase 2C).
-        if (!Array.isArray(ex.completedSets)) ex.completedSets = [];
-        ex.completedSets.push({ weight: ex.actualWeight, reps: ex.actualReps });
+        // A regra (séries pendentes não contam, limites, idempotência de fim)
+        // vive no domínio; aqui só traduzimos a recusa em feedback.
+        const result = WorkoutController.completeSet(s, {
+            weight: current.actualWeight,
+            reps: current.actualReps
+        }, new Date());
 
-        ex.setsCompleted++;
-        s.currentSetIndex++;
-
-        if (s.currentSetIndex > ex.sets) {
-            if (s.currentExerciseIndex < s.exercises.length - 1) {
-                s.currentExerciseIndex++;
-                s.currentSetIndex = 1;
-                updatePlayerUI();
-                return;
-            } else {
-                s.isFinished = true;
-                updatePlayerUI();
-                return;
-            }
+        if (!result.ok) {
+            // A recusa do domínio NÃO é um toque aceito: devolve a janela para
+            // que a correção do usuário seja atendida de imediato.
+            tapGuard.forget(tapKey('complete-set'));
+            showToast(result.message || 'Não foi possível concluir a série.', 'error');
+            return;
         }
 
         updatePlayerUI();
-        
+        // E7: evento discreto -> anuncia para leitores de tela.
+        announcePlayer(translations[state.lang].set_completed);
+
+        // Sem descanso quando o exercício mudou ou o treino terminou
+        // (mesmo comportamento de antes).
+        const advanced = result.session.currentExerciseIndex !== before.ex;
+        if (result.isFinished || advanced) {
+            // Última série: a sessão se encerrou sozinha -> solta a tela acesa
+            // (o toque final só confirma o histórico) e encerra o descanso.
+            if (result.isFinished) {
+                syncWakeLock(false, 'finished');
+                closeRestOverlay();
+            }
+            return;
+        }
+
         // VERIFICA SE O DESCANSO AUTOMÁTICO ESTÁ LIGADO ANTES DE INICIAR O TIMER
         if (state.autoRestEnabled) {
-            startRestTimer(ex.rest);
+            startRestTimer(result.session.exercises[result.session.currentExerciseIndex].rest);
         }
+    }
+
+    // Sprint 4 / E5: pausa/retomada da sessão COM o descanso (D-C). O botão da
+    // UI é um único alternador; o estado real continua sendo `session.status`.
+    function togglePauseWorkout() {
+        if (!state.session) return false;
+        // E6: a blindagem mora AQUI — pausar e retomar são duas ações VÁLIDAS do
+        // domínio, então a cerca é a INTENÇÃO da UI ("alternar"), não a função
+        // chamada. Dois toques seguidos são um toque só.
+        const key = tapKey('pause-toggle');
+        if (!tapGuard.accept(key, new Date())) return false;
+        // Pausada -> retoma. ATIVA ou FINALIZADA -> segue para o controlador,
+        // que recusa com motivo ("o treino está pausado ou finalizado") — a UI
+        // não inventa estado, só mostra a decisão do domínio.
+        const ok = state.session.status === 'paused' ? resumeWorkout(new Date()) : pauseWorkout();
+        // Recusa do domínio (ex.: treino finalizado) não é um toque aceito.
+        if (!ok) tapGuard.forget(key);
+        return ok;
+    }
+
+    function pauseWorkout() {
+        if (!state.session) return false;
+        const now = new Date();
+        const result = WorkoutController.pause(state.session, now);
+        if (!result.ok) {
+            showToast(result.message || 'Não foi possível pausar o treino.', 'error');
+            return false;
+        }
+        restSyncSession(now);
+        updatePlayerUI();
+        // Sessão pausada: manter a tela acesa é bloqueio desnecessário.
+        syncWakeLock(false, 'paused');
+        // E7: anuncia o novo estado (a leitura do botão muda junto).
+        announcePlayer(translations[state.lang].workout_paused);
+        return true;
+    }
+
+    function resumeWorkout(now) {
+        if (!state.session) return false;
+        const at = now || new Date();
+        const result = WorkoutController.resume(state.session, at);
+        if (!result.ok) {
+            showToast(result.message || 'Não foi possível retomar o treino.', 'error');
+            return false;
+        }
+        restSyncSession(at);
+        updatePlayerUI();
+        // Treino voltou a andar: a tela acesa volta junto.
+        syncWakeLock(true, 'resumed');
+        // E7: anuncia o novo estado.
+        announcePlayer(translations[state.lang].workout_resumed);
+        return true;
     }
 
     function prevExercise() {
-        if (state.session.currentExerciseIndex > 0) {
-            state.session.currentExerciseIndex--;
-            state.session.currentSetIndex = state.session.exercises[state.session.currentExerciseIndex].setsCompleted + 1;
-            updatePlayerUI();
+        if (!state.session) return;
+        const result = WorkoutController.prev(state.session);
+        if (!result.ok) {
+            if (result.reason !== 'at-start') showToast(result.message, 'error');
+            return;
         }
+        updatePlayerUI();
     }
 
     function nextExercise() {
-        if (state.session.currentExerciseIndex < state.session.exercises.length - 1) {
-            state.session.currentExerciseIndex++;
-            state.session.currentSetIndex = state.session.exercises[state.session.currentExerciseIndex].setsCompleted + 1;
-            updatePlayerUI();
+        if (!state.session) return;
+        const result = WorkoutController.next(state.session);
+        if (!result.ok) {
+            if (result.reason !== 'at-end') showToast(result.message, 'error');
+            return;
+        }
+        updatePlayerUI();
+    }
+
+    // ================= LÓGICA: DESCANSO (Sprint 4 / E5) =================
+    // A contagem vem do DOMÍNIO (js/rest-timer.js), que mede por PRAZO ABSOLUTO
+    // (`endsAt`): a tela lê sempre o tempo RESTANTE CALCULADO, nunca um contador
+    // decrementado. O `setInterval` daqui é apenas um TICKER DE TELA — se a aba
+    // dormir e perder ticks, o próximo tick mostra o valor correto (o legado
+    // `time--` congelava na suspensão e acumulava erro).
+    const REST_TICK_MS = 250;
+
+    /** O timer VIVO do descanso (null quando não há descanso em tela). */
+    function restTimerObject() {
+        return state.restTimer ? state.restTimer.timer : null;
+    }
+
+    /** Cancela o ticker. Chamado em TODO caminho que fecha o descanso. */
+    function stopRestTicker() {
+        if (state.restTimer.id) {
+            clearInterval(state.restTimer.id);
+            state.restTimer.id = null;
         }
     }
 
-    // ================= LÓGICA: DESCANSO =================
+    /** Leitura pura do estado calculado (null quando não há descanso válido). */
+    function restSnapshot(now) {
+        if (typeof WorkoutController === 'undefined' || !WorkoutController) return null;
+        const out = WorkoutController.restSnapshot(restTimerObject(), now || new Date());
+        return (out && out.ok) ? out.rest : null;
+    }
+
+    function renderRest(rest) {
+        if (!rest) return;
+        const remaining = Math.max(0, rest.remainingMs);
+        const secs = Math.ceil(remaining / 1000);
+        const mins = Math.floor(secs / 60).toString().padStart(2, '0');
+        const sec = (secs % 60).toString().padStart(2, '0');
+        document.getElementById('rest-timer-display').innerText = `${mins}:${sec}`;
+
+        const circumference = 2 * Math.PI * 130;
+        const progress = Math.min(1, Math.max(0, rest.progress));
+        document.getElementById('rest-progress-bar').style.strokeDashoffset =
+            circumference * (1 - progress);
+    }
+
+    function startRestTicker() {
+        stopRestTicker();                 // UM ticker por vez (sem intervalos órfãos)
+        state.restTimer.id = setInterval(tickRest, REST_TICK_MS);
+    }
+
+    function tickRest() {
+        const rest = restSnapshot(new Date());
+        if (!rest) {
+            // Timer sumiu (descanso de outra execução, estado inválido): fecha
+            // a tela em vez de mentir um tempo.
+            closeRestOverlay();
+            return;
+        }
+        if (rest.finished) {
+            endRest('settle');            // venceu (inclusive durante suspensão)
+            return;
+        }
+        // Sprint 4 / E7: descanso CONGELADO (sessão pausada) não muda entre
+        // ticks — re-renderizar a cada 250 ms é trabalho jogado fora. O domínio
+        // segue dono do tempo: ao retomar, o próximo tick desenha o valor certo.
+        // (O interval NÃO é suspenso: preserva o invariante da E5 de exatamente
+        // um ticker em tela; aqui só se evita o render desnecessário.)
+        if (rest.status === 'paused') return;
+        renderRest(rest);
+    }
+
+    /** Fecha o overlay, cancela o ticker e descarta o timer (D-A: efêmero). */
+    function closeRestOverlay() {
+        stopRestTicker();
+        document.getElementById('rest-overlay').classList.remove('active');
+        state.restTimer.timer = null;
+        // E7.1: sem diálogo aberto não há contenção de foco (não fica pendurada).
+        releaseRestFocusTrap();
+        // E7: devolve o foco ao controle principal do Player (se ainda estamos
+        // nele), para a navegação por teclado não cair no <body>.
+        if (state.currentScreen === 'player') {
+            const cta = document.getElementById('btn-complete-set');
+            if (cta) cta.focus();
+        }
+    }
+
+    /**
+     * Encerra o descanso pelo DOMÍNIO: `settle` quando o prazo venceu, `skip`
+     * quando o usuário pula. Ambas são idempotentes no domínio.
+     */
+    function endRest(mode) {
+        const timer = restTimerObject();
+        if (timer) {
+            const now = new Date();
+            const out = mode === 'skip'
+                ? WorkoutController.restSkip(timer, now, state.session)
+                : WorkoutController.restSettle(timer, now, state.session);
+            if (out && out.ok) state.restTimer.timer = out.timer;
+        }
+        closeRestOverlay();
+        // E7: o descanso terminou SOZINHO (venceu) -> anuncia. O "pular" é ação
+        // do usuário e não precisa de anúncio.
+        if (mode === 'settle') announcePlayer(translations[state.lang].rest_finished);
+    }
+
+    // ================= E7.1: DIÁLOGO MODAL DO DESCANSO =================
+    // Enquanto o overlay está aberto ele é um diálogo MODAL (`role=dialog`,
+    // `aria-modal=true`): o fundo não é alcançável por Tab/Shift+Tab e o foco
+    // fica CONTIDO nos controles do descanso. É local de propósito — nada de
+    // framework genérico de modais. O listener só existe com o overlay aberto.
+    let restTrapActive = false;
+
+    /** Controles focáveis do overlay, na ordem do DOM. */
+    function restFocusables() {
+        return Array.from(document.querySelectorAll(
+            '#rest-overlay button:not([disabled]), #rest-overlay [href], ' +
+            '#rest-overlay input:not([disabled]), #rest-overlay select:not([disabled]), ' +
+            '#rest-overlay textarea:not([disabled]), #rest-overlay [tabindex]:not([tabindex="-1"])'
+        ));
+    }
+
+    function restTrapKeydown(e) {
+        // Escape fecha pelo caminho SEGURO: encerra o descanso pelo DOMÍNIO
+        // (restSkip, idempotente e efêmero — o mesmo do botão "Pular"). Não há
+        // perda de dados; é o único "fechar" coerente do overlay.
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            skipRest();
+            return;
+        }
+        if (e.key !== 'Tab') return;
+        const items = restFocusables();
+        if (items.length === 0) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        const active = document.activeElement;
+        const inside = items.indexOf(active) !== -1;
+        if (e.shiftKey) {
+            if (!inside || active === first) { e.preventDefault(); last.focus(); }
+        } else if (!inside || active === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    }
+
+    /** Liga a contenção (idempotente: nunca registra o listener duas vezes). */
+    function engageRestFocusTrap() {
+        if (restTrapActive) return;
+        restTrapActive = true;
+        document.addEventListener('keydown', restTrapKeydown, true);
+    }
+
+    /** Desliga a contenção — chamado em TODO fechamento (não fica pendurada). */
+    function releaseRestFocusTrap() {
+        if (!restTrapActive) return;
+        restTrapActive = false;
+        document.removeEventListener('keydown', restTrapKeydown, true);
+    }
 
     function startRestTimer(seconds) {
-        state.restTimer.time = seconds;
-        state.restTimer.total = seconds;
-        state.restTimer.isRunning = true;
-        
+        if (typeof WorkoutController === 'undefined' || !WorkoutController) return false;
+        // O timer NASCE no domínio (vinculado à execução). Sem descanso válido
+        // o treino segue normal: a tela simplesmente não abre.
+        const out = WorkoutController.restStart(state.session, seconds, new Date());
+        if (!out.ok) return false;
+        state.restTimer.timer = out.timer;
         document.getElementById('rest-overlay').classList.add('active');
-        updateRestUI();
-
-        if (state.restTimer.id) clearInterval(state.restTimer.id);
-        state.restTimer.id = setInterval(() => {
-            state.restTimer.time--;
-            if (state.restTimer.time <= 0) {
-                skipRest();
-            } else {
-                updateRestUI();
-            }
-        }, 1000);
+        renderRest(restSnapshot(new Date()));
+        startRestTicker();
+        // E7: leva o foco ao primeiro controle do overlay (navegação por teclado
+        // entra na sobreposição em vez de ficar presa atrás dela).
+        const firstRestControl = document.getElementById('btn-rest-increase');
+        if (firstRestControl) firstRestControl.focus();
+        // E7.1: com o foco dentro, o overlay passa a CONTER o Tab (diálogo modal).
+        engageRestFocusTrap();
+        return true;
     }
 
-    function updateRestUI() {
-        const t = state.restTimer.time;
-        const total = state.restTimer.total;
-        const mins = Math.floor(t / 60).toString().padStart(2, '0');
-        const secs = (t % 60).toString().padStart(2, '0');
-        document.getElementById('rest-timer-display').innerText = `${mins}:${secs}`;
-        
-        const circumference = 2 * Math.PI * 130;
-        const offset = circumference - (t / total) * circumference;
-        document.getElementById('rest-progress-bar').style.strokeDashoffset = offset;
-    }
-
-    function adjustRestTime(amount) {
-        if (!state.restTimer.isRunning) return;
-        state.restTimer.time = Math.max(0, state.restTimer.time + amount);
-        state.restTimer.total = Math.max(state.restTimer.total, state.restTimer.time);
-        updateRestUI();
+    /** ± segundos vindo dos botões do overlay (a UI converte para ms). */
+    function adjustRestTime(amountSeconds) {
+        const timer = restTimerObject();
+        if (!timer) return false;
+        const out = WorkoutController.restAdd(
+            timer, Math.round(amountSeconds * 1000), new Date(), state.session
+        );
+        if (!out.ok) return false;
+        state.restTimer.timer = out.timer;
+        renderRest(restSnapshot(new Date()));
+        return true;
     }
 
     function skipRest() {
-        clearInterval(state.restTimer.id);
-        state.restTimer.isRunning = false;
-        document.getElementById('rest-overlay').classList.remove('active');
+        endRest('skip');
+    }
+
+    /**
+     * Alinha o descanso ao estado da sessão (D-C: pausa/retomada juntos).
+     * Sem descanso em tela é no-op — o caminho comum de quem treina sem timer.
+     */
+    function restSyncSession(now) {
+        const timer = restTimerObject();
+        if (!timer || !state.session) return false;
+        const out = WorkoutController.restSync(timer, state.session, now || new Date());
+        if (out && out.ok) state.restTimer.timer = out.timer;
+        return !!(out && out.ok);
     }
 
     // ================= LÓGICA: SAÍDA E HISTÓRICO =================
@@ -1254,55 +2717,91 @@
     }
 
     function saveAndExit() {
+        // Sai do Player: a tela acesa vai junto (o histórico é gravado abaixo)
+        // e o descanso é encerrado com o ticker cancelado (E5).
+        syncWakeLock(false, 'exit');
+        closeRestOverlay();
         saveSessionToHistory('partial');
         state.session = null;
+        sessionPendingDecision = false;
+        WorkoutController.clear();
         closeExitModal();
         navigate('home');
     }
 
     function discardAndExit() {
+        syncWakeLock(false, 'discard');
+        closeRestOverlay();
         state.session = null;
+        sessionPendingDecision = false;
+        // Sprint 4: descartar remove a sessão persistida e NADA mais
+        // (histórico, rotinas, catálogo e PRs ficam intactos).
+        WorkoutController.clear();
         closeExitModal();
         navigate('home');
     }
 
+    // ================= SESSÃO RECUPERADA APÓS RELOAD (Sprint 4) =================
+
+    function showResumePrompt() {
+        const modal = document.getElementById('resume-modal');
+        if (!modal || !state.session) return;
+        modal.classList.add('active');
+    }
+
+    function closeResumeModal() {
+        const modal = document.getElementById('resume-modal');
+        if (modal) modal.classList.remove('active');
+    }
+
+    function resumeRestoredSession() {
+        closeResumeModal();
+        if (!state.session) return;
+        sessionPendingDecision = false;
+        // Sessão recuperada pausada: retoma o relógio antes de voltar ao player.
+        if (state.session.status === 'paused') {
+            WorkoutController.resume(state.session, new Date());
+        }
+        // O descanso é EFÊMERO (D-A): nunca volta de uma recarga. Fecha a tela
+        // por garantia, para entrar no Player sem timer pendurado.
+        closeRestOverlay();
+        navigate('player');
+        updatePlayerUI();
+        // Volta ao Player com treino em andamento -> tela acesa de novo. Uma
+        // sessão já finalizada (só aguardando confirmação) não deve manter o
+        // bloqueio ligado.
+        syncWakeLock(state.session.status === 'active', 'resume');
+    }
+
+    function discardRestoredSession() {
+        closeResumeModal();
+        syncWakeLock(false, 'discard');
+        closeRestOverlay();
+        state.session = null;
+        sessionPendingDecision = false;
+        WorkoutController.clear();
+        showToast('Treino descartado.', 'success');
+    }
+
     function saveSessionToHistory(status) {
         const s = state.session;
-        if (!s || !Array.isArray(s.exercises)) return;
+        if (!s || !Array.isArray(s.exercises)) return { ok: false, reason: 'no-session', message: '' };
 
-        // Só as séries EFETIVAMENTE concluídas entram no histórico (Fase 2C).
-        const exercises = s.exercises.map(ex => ({
-            catalogId: ex.catalogId || null,
-            name: ex.name || '',
-            muscle: ex.muscle || '',
-            sets: (Array.isArray(ex.completedSets) ? ex.completedSets : [])
-                .map(st => ({ weight: Number(st.weight) || 0, reps: Number(st.reps) || 0 }))
-        })).filter(ex => ex.sets.length > 0);
+        // Entrada montada pelo controlador, com identidade ESTÁVEL (`session.id`)
+        // e recusa de duplicidade: a mesma execução nunca entra duas vezes,
+        // mesmo após reload ou chamadas repetidas de finalização.
+        const result = WorkoutController.appendToHistory(state.history, s, status, new Date());
+        if (!result.ok) {
+            if (result.reason === 'duplicate-history') {
+                console.warn('[Workout] sessão já registrada no histórico:', WorkoutController.sessionKey(s));
+            }
+            // Operação terminal: a sessão sai do estado ativo de qualquer modo.
+            WorkoutController.clear();
+            return result;
+        }
 
-        const completedExercises = exercises.length ||
-            s.exercises.filter(ex => ex.setsCompleted > 0).length;
-
-        if (completedExercises === 0 && status === 'partial') return;
-
-        const now = new Date();
-        const startedAt = (s.startedAt instanceof Date) ? s.startedAt : null;
-        const durationMin = startedAt ? Math.max(0, Math.round((now - startedAt) / 60000)) : 0;
-        const dateStr = now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
-
-        const entry = {
-            id: Date.now(),
-            name: `Treino ${s.letter} — ${s.routineName}`,
-            routineId: s.routineId || null,
-            letter: s.letter || null,
-            date: `${dateStr}, ${now.getHours()}:${TTUtils.pad2(now.getMinutes())}`,
-            dateISO: TTUtils.todayISO(now),
-            durationMin: durationMin,
-            duration: durationMin > 0 ? TTUtils.formatDuration(durationMin) : '-- min',
-            status: status,
-            exercises: exercises
-        };
-
-        state.history.unshift(entry);
+        const entry = result.entry;
+        state.history = result.history;
 
         // Engine de PRs (Fase 2C): calcula sobre o histórico já com a entrada nova.
         if (typeof PR !== 'undefined') {
@@ -1318,9 +2817,18 @@
 
         Persistence.saveHistory(state.history);
 
+        // Sprint 5.1: o resumo semanal da Home é DERIVADO do histórico — assim
+        // que ele muda, o resumo precisa ser redesenhado (sem esperar navegação).
+        renderHome();
+
+        // Histórico gravado: não há mais nada a retomar.
+        WorkoutController.clear();
+
         if (typeof EventBus !== 'undefined') {
             EventBus.emit('history:added', { entry: entry, status: status });
         }
+
+        return result;
     }
 
     function renderPRSummary() {
@@ -1341,6 +2849,123 @@
                 ? `<p class="text-muted" style="margin:0; font-size:0.85rem;">Top: <strong style="color:var(--text-main)">${TTUtils.escapeHtml(stats.topExercise)}</strong> (${stats.topCount})</p>`
                 : ''}
         `;
+    }
+
+    // ================= HOME: RESUMO SEMANAL (Sprint 5.1) =================
+    // A faixa de segunda a domingo e os dois cards são DERIVADOS do histórico
+    // real por `js/home-insights.js` (módulo puro). Nada aqui inventa dado: sem
+    // registro no período, a semana aparece vazia e o cardio fica "0 / meta".
+    const HOME_WEEKDAY_KEYS = ['weekday_mon', 'weekday_tue', 'weekday_wed', 'weekday_thu', 'weekday_fri', 'weekday_sat', 'weekday_sun'];
+
+    /**
+     * Rótulo RELATIVO do dia, calculado a partir de uma data CONFIÁVEL (`daysAgo`
+     * derivado do `dateISO`) e no idioma ativo: hoje/ontem, "há N dias" na
+     * primeira semana e data absoluta (dd/mm) depois. O texto livre do legado
+     * (ex.: "Ontem, 18:30") nunca é usado como data nem como rótulo.
+     */
+    function homeDayLabel(daysAgo, dateISO, t) {
+        if (daysAgo <= 0) return t.date_today;
+        if (daysAgo === 1) return t.date_yesterday;
+        if (daysAgo < 7) return String(t.date_days_ago || '{n}').replace('{n}', String(daysAgo));
+        const iso = typeof dateISO === 'string' ? dateISO : '';
+        return iso.length === 10 ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : '';
+    }
+
+    function renderHome() {
+        if (typeof HomeInsights === 'undefined' || !HomeInsights) return;
+        const t = translations[state.lang] || translations.pt;
+        // Data de referência EXPLÍCITA: a semana corrente do usuário.
+        const now = new Date();
+        const insights = HomeInsights.build(state.history, now);
+
+        // Sprint 5.1.1: os cards da Home tinham valores FICTÍCIOS no markup.
+        // Agora saem do histórico real: "Treino de hoje" = registro do dia da
+        // referência. Sem registro válido o card mostra estado vazio LOCALIZADO —
+        // nunca um valor estático.
+        const today = HomeInsights.todayWorkout(state.history, now);
+
+        const todayName = document.getElementById('home-today-name');
+        // Texto vindo do histórico/user: escrito por textContent (sem HTML).
+        if (todayName) todayName.textContent = today ? today.name : t.home_no_workout_today;
+        const todayExercises = document.getElementById('home-today-exercises');
+        if (todayExercises) todayExercises.textContent = today && today.exercises > 0 ? String(today.exercises) : '—';
+        const todayDuration = document.getElementById('home-today-duration');
+        if (todayDuration) todayDuration.textContent = today && today.durationMin > 0 ? today.durationMin + ' min' : '—';
+
+        // Sprint 5.1.2: "Último treino" (um card estático) virou "Últimos treinos":
+        // faixa horizontal com os últimos CONCLUÍDOS, do mais recente para o mais
+        // antigo. Seleção/ordenação ficam em HomeInsights (função pura); aqui só
+        // apresentação. Sem registro elegível a faixa fica vazia e o estado vazio
+        // localizado aparece — nenhum card é inventado para "completar" a faixa.
+        const recent = HomeInsights.recentCompletedWorkouts(state.history, HomeInsights.RECENT_LIMIT, now);
+        const recentStrip = document.getElementById('home-recent-strip');
+        if (recentStrip) {
+            const recentLabelKey = recentStrip.getAttribute('data-i18n-label');
+            if (recentLabelKey) recentStrip.setAttribute('aria-label', t[recentLabelKey] || recentLabelKey);
+
+            recentStrip.innerHTML = recent.map((item) => {
+                const when = homeDayLabel(item.daysAgo, item.dateISO, t);
+                const duration = item.durationMin > 0 ? `${item.durationMin} min` : '';
+                const exercises = item.exercises > 0
+                    ? `${item.exercises} ${item.exercises === 1 ? t.exercises_count_one : t.exercises_count}`
+                    : '';
+                // Sprint 5.1.3 (M3): o MESMO nome alimenta o card visível e o
+                // rótulo acessível — registro sem nome mostra o neutro localizado
+                // nos dois (antes o card dizia "Sem treino" e o leitor de tela
+                // anunciava só data/duração, divergindo do que está na tela).
+                const name = item.name || t.no_workout;
+                // Uma linha de "quando + duração" e uma de "exercícios"; o que não
+                // existe no registro simplesmente não aparece (nada é inventado).
+                const meta = [when, duration].filter(Boolean).join(' • ');
+                // Rótulo acessível: mesmas informações, em itens separados por
+                // vírgula (o separador visual "•" seria lido como "bullet").
+                const label = [name, when, duration, exercises].filter(Boolean).join(', ');
+                return `
+                    <div class="recent-card" role="listitem" aria-label="${TTUtils.escapeHtml(label)}">
+                        <span class="recent-card-name">${TTUtils.escapeHtml(name)}</span>
+                        <span class="recent-card-meta">${TTUtils.escapeHtml(meta)}</span>
+                        ${exercises ? `<span class="recent-card-meta">${TTUtils.escapeHtml(exercises)}</span>` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+        const recentEmpty = document.getElementById('home-recent-empty');
+        if (recentEmpty) recentEmpty.style.display = recent.length ? 'none' : '';
+
+        const strip = document.getElementById('home-weekly-strip');
+        if (strip) {
+            // A chave do nome acessível da faixa vem declarada no próprio markup
+            // (`data-i18n-label`), resolvida aqui para seguir o idioma ativo.
+            const labelKey = strip.getAttribute('data-i18n-label');
+            if (labelKey) strip.setAttribute('aria-label', t[labelKey] || labelKey);
+
+            strip.innerHTML = insights.days.map((day, index) => {
+                const weekday = t[HOME_WEEKDAY_KEYS[index]] || '';
+                const hasWorkout = day.count > 0;
+                // A célula mostra a LETRA do treino (ou o nome, truncado pelo CSS);
+                // o nome completo fica no aria-label. Texto do usuário -> escapado.
+                const mark = hasWorkout ? (day.entry.letter || day.entry.name || '') : '';
+                const more = day.extra > 0 ? '+' + day.extra : '';
+                const label = hasWorkout
+                    ? `${weekday} ${day.dayOfMonth}: ${day.entry.name || ''}` +
+                      (day.count > 1 ? `, ${day.count} ${t.workouts_count}` : '')
+                    : `${weekday} ${day.dayOfMonth}: ${t.no_workout}`;
+                return `
+                    <div class="weekly-day${hasWorkout ? '' : ' empty'}" role="listitem" aria-label="${TTUtils.escapeHtml(label)}">
+                        <span class="weekly-day-name">${TTUtils.escapeHtml(weekday)}</span>
+                        <span class="weekly-day-date">${day.dayOfMonth}</span>
+                        <span class="weekly-day-workout">${TTUtils.escapeHtml(mark || t.no_workout)}</span>
+                        ${more ? `<span class="weekly-day-more">${more}</span>` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        const cardio = document.getElementById('home-cardio-value');
+        if (cardio) cardio.innerText = `${insights.cardioMinutes} / ${insights.cardioGoal} min`;
+
+        const streak = document.getElementById('home-streak-value');
+        if (streak) streak.innerText = `${insights.consecutiveDays} ${t.days}`;
     }
 
     function renderHistory() {
@@ -1376,6 +3001,11 @@
     // ================= LÓGICA: EXCLUSÃO DE ROTINA + CONFIRMAÇÃO + FEEDBACK =================
 
     let _confirmHandler = null;
+    let _confirmReturnFocus = null;
+    let _confirmModalOpen = false;
+    let _confirmDismissible = true;
+    let _confirmTrapActive = false;
+    let _confirmInerted = [];
     let _toastTimer = null;
 
     function showToast(message, type) {
@@ -1387,22 +3017,152 @@
         _toastTimer = setTimeout(() => { el.className = 'app-toast'; }, 2600);
     }
 
-    function showConfirm(title, description, onConfirm) {
+    /** Controles realmente focáveis do diálogo, na ordem do DOM (A-04). */
+    function modalFocusables(root) {
+        if (!root) return [];
+        return Array.from(root.querySelectorAll(
+            'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), ' +
+            'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )).filter((el) => {
+            if (el.hasAttribute('disabled')) return false;
+            if (el.getAttribute('aria-hidden') === 'true') return false;
+            if (el.closest && el.closest('[inert]')) return false;
+            return typeof el.getClientRects !== 'function' || el.getClientRects().length > 0;
+        });
+    }
+
+    /** Isola o fundo com `inert`, preservando o que já estava inerte. */
+    function setModalBackgroundInert(modal, inert) {
+        if (!inert) {
+            _confirmInerted.forEach((el) => {
+                if (el.isConnected) el.removeAttribute('inert');
+            });
+            _confirmInerted = [];
+            return;
+        }
+        if (!modal || !modal.parentElement) return;
+        _confirmInerted = [];
+        Array.from(modal.parentElement.children).forEach((el) => {
+            if (el === modal) return;
+            if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE' || el.tagName === 'LINK') return;
+            // Um fundo já inerte antes da abertura continua inerte no fechamento.
+            if (el.hasAttribute('inert')) return;
+            el.setAttribute('inert', '');
+            _confirmInerted.push(el);
+        });
+    }
+
+    function confirmModalTrapKeydown(e) {
+        if (!_confirmModalOpen) return;
+
+        if (e.key === 'Escape') {
+            // Componentes internos com comportamento próprio podem consumir o
+            // Escape antes de o diálogo decidir (ex.: select aberto).
+            if (e.defaultPrevented) return;
+            e.preventDefault();
+            // Fecha apenas esta camada; não deixa o evento chegar a outro modal.
+            e.stopImmediatePropagation();
+            if (_confirmDismissible) closeConfirmModal();
+            return;
+        }
+
+        if (e.key !== 'Tab') return;
+        const modal = document.getElementById('confirm-modal');
+        if (!modal) return;
+        const items = modalFocusables(modal);
+        if (!items.length) {
+            e.preventDefault();
+            if (typeof modal.focus === 'function') modal.focus();
+            return;
+        }
+        const first = items[0];
+        const last = items[items.length - 1];
+        const active = document.activeElement;
+        const inside = items.indexOf(active) !== -1;
+        if (e.shiftKey) {
+            if (!inside || active === first) {
+                e.preventDefault();
+                last.focus();
+            }
+        } else if (!inside || active === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    }
+
+    function engageConfirmFocusTrap() {
+        if (_confirmTrapActive) return;
+        _confirmTrapActive = true;
+        document.addEventListener('keydown', confirmModalTrapKeydown, false);
+    }
+
+    function releaseConfirmFocusTrap() {
+        if (!_confirmTrapActive) return;
+        _confirmTrapActive = false;
+        document.removeEventListener('keydown', confirmModalTrapKeydown, false);
+    }
+
+    /** Garante um destino válido depois que o callback altera a tela. */
+    function ensureActiveScreenFocus() {
+        if (isUsableFocusTarget(document.activeElement)) return true;
+        return focusFallbackForScreen();
+    }
+
+    function showConfirm(title, description, onConfirm, options) {
+        const opts = options || {};
+        // Reabrir sem fechar antes não pode empilhar listeners/estado.
+        if (_confirmModalOpen) closeConfirmModal({ restoreFocus: false });
+        const modal = document.getElementById('confirm-modal');
+        if (!modal) return false;
+
         document.getElementById('confirm-title').innerText = title;
         document.getElementById('confirm-desc').innerText = description;
         _confirmHandler = typeof onConfirm === 'function' ? onConfirm : null;
-        document.getElementById('confirm-modal').classList.add('active');
+        _confirmReturnFocus = isUsableFocusTarget(document.activeElement)
+            ? document.activeElement : null;
+        _confirmDismissible = opts.dismissible !== false;
+        _confirmModalOpen = true;
+        modal.classList.add('active');
+        setModalBackgroundInert(modal, true);
+        engageConfirmFocusTrap();
+
+        // Cancelar é o foco seguro; se estiver indisponível, usa o primeiro
+        // controle válido ou o próprio diálogo (tabindex="-1").
+        const cancel = document.getElementById('confirm-cancel');
+        const focusables = modalFocusables(modal);
+        const initial = focusables.indexOf(cancel) !== -1 ? cancel : (focusables[0] || modal);
+        if (initial && typeof initial.focus === 'function') initial.focus();
+        return true;
     }
 
-    function closeConfirmModal() {
-        document.getElementById('confirm-modal').classList.remove('active');
+    function closeConfirmModal(options) {
+        const opts = options || {};
+        const shouldRestore = opts.restoreFocus !== false;
+        const returnFocus = _confirmReturnFocus;
+        const modal = document.getElementById('confirm-modal');
+
+        _confirmReturnFocus = null;
         _confirmHandler = null;
+        _confirmModalOpen = false;
+        _confirmDismissible = true;
+        releaseConfirmFocusTrap();
+        // O fundo precisa voltar a ser focável ANTES de devolver o foco ao
+        // acionador, pois ele pode estar dentro de uma região inert.
+        setModalBackgroundInert(modal, false);
+        if (modal) modal.classList.remove('active');
+
+        if (!shouldRestore) return;
+        if (isUsableFocusTarget(returnFocus)) returnFocus.focus();
+        else focusFallbackForScreen();
     }
 
     function confirmModalAccept() {
         const cb = _confirmHandler;
-        closeConfirmModal();
+        // O callback pode remover o acionador (ex.: excluir um item da lista).
+        // Não restauramos o foco antes dele; garantimos um destino válido depois.
+        closeConfirmModal({ restoreFocus: false });
         if (cb) cb();
+        ensureActiveScreenFocus();
     }
 
     // Persistência de rotinas: no modo memória (storage indisponível) a
@@ -1420,17 +3180,20 @@
             return;
         }
         if (state.session && state.session.routineId === routineId) {
-            showToast('Treino em execução. Finalize ou saia antes de excluir.', 'error');
+            // Sprint 4: explica o bloqueio com o ESTADO REAL da sessão
+            // (ativa / pausada / concluída / recuperada aguardando decisão).
+            showToast(RoutineActions.blockMessage(state.session, sessionPendingDecision), 'error');
             return;
         }
         showConfirm(
             'Excluir treino?',
-            `O treino "${r.name}" (Treino ${r.letter}) será removido. Histórico e recordes são preservados.`,
+            `O treino "${routineDisplayName(r)}" (Treino ${r.letter}) será removido. Histórico e recordes são preservados.`,
             () => {
                 const result = (typeof RoutineActions !== 'undefined')
                     ? RoutineActions.deleteRoutine({
                         routines: state.routines,
                         session: state.session,
+                        recovered: sessionPendingDecision,
                         id: routineId,
                         save: persistRoutines
                     })
@@ -1456,6 +3219,76 @@
     document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('search-catalog').addEventListener('input', renderCatalog);
 
+        // Sprint 5.2.1/A-01: IDs de catálogo nunca entram em onclick inline.
+        // Delegação por data-attribute mantém o dado como texto e impede que
+        // um id malformado do storage vire código executável.
+        const catalogContainer = document.getElementById('catalog-container');
+        if (catalogContainer) {
+            catalogContainer.addEventListener('click', (event) => {
+                const button = event.target && event.target.closest
+                    ? event.target.closest('.btn-add-circle') : null;
+                if (!button) return;
+                const catalogId = button.getAttribute('data-catalog-id');
+                if (catalogId) addExerciseToRoutine(catalogId);
+            });
+        }
+
+        // Sprint 5.3: o nome da rotina é editável pelo usuário, então ele NUNCA
+        // entra em onclick inline. A delegação por data-* mantém nome/letra/id
+        // como texto e impede que um nome malformado do storage vire código.
+        const routinesContainer = document.getElementById('routines-container');
+        if (routinesContainer) {
+            routinesContainer.addEventListener('click', (event) => {
+                const actionEl = event.target && event.target.closest
+                    ? event.target.closest('[data-routine-action]') : null;
+                if (!actionEl) return;
+                const action = actionEl.getAttribute('data-routine-action');
+                const routineId = actionEl.getAttribute('data-routine-id');
+                if (!routineId) return;
+                if (action === 'open') navigate('details', routineId);
+                else if (action === 'edit') navigate('edit', routineId);
+                else if (action === 'delete') askDeleteRoutine(routineId);
+            });
+            routinesContainer.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                const card = event.target && event.target.closest
+                    ? event.target.closest('[data-routine-action="open"]') : null;
+                // Só o próprio card abre por teclado: Enter/Espaço nos botões
+                // internos (editar/excluir) continuam acionando o botão focado.
+                if (!card || event.target !== card) return;
+                event.preventDefault();
+                const routineId = card.getAttribute('data-routine-id');
+                if (routineId) navigate('details', routineId);
+            });
+        }
+
+        const customList = document.getElementById('custom-exercises-list');
+        if (customList) {
+            customList.addEventListener('click', (event) => {
+                const button = event.target && event.target.closest
+                    ? event.target.closest('[data-custom-action]') : null;
+                if (!button) return;
+                const customId = button.getAttribute('data-custom-id');
+                const action = button.getAttribute('data-custom-action');
+                if (!customId) return;
+                if (action === 'edit') openCustomExerciseEdit(customId);
+                else if (action === 'delete') askDeleteCustomExercise(customId);
+            });
+        }
+
+        // Sprint 5.2.1: criação de exercício personalizado.
+        const customForm = document.getElementById('custom-exercise-form');
+        if (customForm) {
+            customForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                createCustomExercise();
+            });
+        }
+        const customName = document.getElementById('custom-exercise-name');
+        if (customName) customName.addEventListener('input', clearCustomExerciseError);
+        const customMuscle = document.getElementById('custom-exercise-muscle');
+        if (customMuscle) customMuscle.addEventListener('change', clearCustomExerciseError);
+
         // Modal genérico de confirmação (Fase 2C)
         const confirmCancel = document.getElementById('confirm-cancel');
         const confirmOk = document.getElementById('confirm-ok');
@@ -1463,6 +3296,15 @@
         if (confirmOk) confirmOk.addEventListener('click', confirmModalAccept);
 
         navigate('home');
+
+        // Sprint 4 / E4: o navegador libera a tela acesa quando a aba sai de
+        // foco; ao voltar, o adaptador reavalia sozinho se ainda há treino
+        // ativo. UM listener por carregamento (attach é idempotente) e limpeza
+        // explícita quando a página é descarregada.
+        if (typeof WakeLock !== 'undefined' && WakeLock) {
+            WakeLock.attach(document);
+            window.addEventListener('pagehide', () => WakeLock.detach());
+        }
     });
 
 </script>
@@ -1477,6 +3319,25 @@
     document.addEventListener('DOMContentLoaded', () => {
         I18n.syncDocument(I18n.getLocale());
         I18n.applyTranslations();
+        // E7: nomes acessíveis dos controles simbólicos do Player (+15s/−15s/✕).
+        applyPlayerA11yLabels();
+        I18n.onChange(() => applyPlayerA11yLabels());
+        // Sprint 5.2.1: placeholder, grupos e erro do cadastro no idioma ativo,
+        // preservando o que o usuário digitou.
+        I18n.onChange(() => refreshCustomExerciseTranslations());
+        // Sprint 5.2.1 (Fase 4): rótulos/aria da lista e erros de gerenciamento
+        // também acompanham o idioma ativo.
+        I18n.onChange(() => refreshCustomExercisesManagementTranslations());
+        // Sprint 5.1: a Home semanal é texto derivado do histórico (nomes de dias,
+        // com ou sem treino, contadores) -> redesenha quando o idioma muda.
+        I18n.onChange(() => renderHome());
+
+        // Sprint 4: se havia uma sessão de treino em andamento, oferece
+        // retomar ou descartar (o estado já veio sanitizado pelo domínio).
+        // Enquanto o usuário não decide, a sessão conta como "recuperada
+        // aguardando decisão" — é o estado que a mensagem de exclusão informa.
+        if (state.session) sessionPendingDecision = true;
+        showResumePrompt();
     });
 </script>
 </body>
