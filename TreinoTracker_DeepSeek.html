@@ -478,6 +478,65 @@
         .player-nav-btns { display: flex; gap: 12px; margin-bottom: 24px; }
         .player-nav-btns .btn { flex: 1; }
 
+        /* ================= SPRINT 5.5: PRÓXIMOS EXERCÍCIOS =================
+           Lista somente leitura, derivada da sessão. Sem largura fixa: os
+           nomes longos truncam com reticências e nada estoura em 320 px. */
+        .player-upcoming { margin-bottom: 24px; }
+        .player-upcoming-title {
+            margin: 0 0 8px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+        .player-upcoming-list {
+            /* `list-style: none` remove os marcadores; o `role="list"` no <ol>
+               preserva a semântica de lista no Safari/VoiceOver. */
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .player-upcoming-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+            padding: 8px 12px;
+            border-radius: 10px;
+            background: var(--card-bg);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .player-upcoming-index {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--card-hover);
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+        .player-upcoming-body { flex: 1 1 auto; min-width: 0; }
+        .player-upcoming-name,
+        .player-upcoming-meta {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .player-upcoming-name { font-size: 0.9rem; font-weight: 600; color: var(--text-main); }
+        .player-upcoming-meta { font-size: 0.75rem; color: var(--text-muted); }
+        .player-upcoming-note { margin: 8px 0 0; font-size: 0.75rem; color: var(--text-muted); }
+        .player-upcoming-note[hidden] { display: none; }
+
         .fixed-action-btn {
             position: fixed; bottom: 0; width: 100%; max-width: 480px;
             padding: 16px 20px; background: linear-gradient(to top, var(--bg-color) 70%, transparent); z-index: 100;
@@ -912,6 +971,16 @@
                 <button class="btn" onclick="prevExercise()" id="btn-prev-ex">← <span data-i18n="prev">Anterior</span></button>
                 <button class="btn" onclick="nextExercise()" id="btn-next-ex"><span data-i18n="next">Próximo</span> →</button>
             </div>
+
+            <!-- Sprint 5.5: próximos exercícios (somente leitura).
+                 Derivado de state.session, abaixo de Anterior/Próximo.
+                 Sem clique, sem navegação e sem gravação em storage. -->
+            <section id="player-upcoming" class="player-upcoming" aria-labelledby="player-upcoming-title">
+                <h3 class="player-upcoming-title" id="player-upcoming-title" data-i18n="upcoming_exercises">Próximos exercícios</h3>
+                <ol class="player-upcoming-list" id="player-upcoming-list" role="list"></ol>
+                <p class="player-upcoming-note" id="player-upcoming-remaining" hidden></p>
+                <p class="player-upcoming-note" id="player-upcoming-empty" data-i18n="upcoming_empty" hidden>Fim da lista de exercícios.</p>
+            </section>
         </div>
 
         <div class="fixed-action-btn">
@@ -2285,6 +2354,87 @@
         return true;
     }
 
+    // ================= PRÓXIMOS EXERCÍCIOS (Sprint 5.5) =================
+    // Seção SOMENTE LEITURA logo abaixo de Anterior/Próximo. A lista é
+    // DERIVADA da sessão: nada é copiado para outro estado e nada é gravado.
+    // Até 3 exercícios seguintes, na numeração absoluta do treino.
+    const UPCOMING_LIMIT = 3;
+
+    /** Assinatura do último render — evita redesenho a cada updatePlayerUI. */
+    let upcomingSignature = '';
+
+    /** Troca um único token ({n} / {count}) sem interpretar `$&` do nome. */
+    function interpolateToken(template, token, value) {
+        return String(template).split(token).join(String(value));
+    }
+
+    /**
+     * Nome do próximo exercício ou o fallback "Exercício N" quando ausente.
+     * O retorno NÃO é escapado aqui: o chamador aplica `catalogText()`.
+     */
+    function upcomingExerciseName(ex, position) {
+        const name = ex && typeof ex.name === 'string' ? ex.name.trim() : '';
+        return name || interpolateToken(I18n.t('upcoming_fallback'), '{n}', position);
+    }
+
+    /** Grupo muscular + séries × repetições, apenas quando disponíveis. */
+    function upcomingExerciseMeta(ex) {
+        const parts = [];
+        if (ex && typeof ex.muscle === 'string' && ex.muscle.trim()) parts.push(ex.muscle.trim());
+        const sets = ex ? Number(ex.sets) : NaN;
+        const reps = ex ? Number(ex.reps) : NaN;
+        if (isFinite(sets) && sets > 0 && isFinite(reps) && reps > 0) {
+            parts.push(`${sets} × ${reps}`);
+        }
+        return parts.join(' · ');
+    }
+
+    /**
+     * Desenha os próximos exercícios. Sem carga e sem descanso prescrito.
+     * Ao chegar no último exercício a lista fica vazia e a mensagem de fim
+     * aparece — a seção continua visível durante a pausa.
+     */
+    function renderUpcomingExercises(s) {
+        const list = document.getElementById('player-upcoming-list');
+        if (!list || !s || !Array.isArray(s.exercises)) return;
+
+        const start = s.currentExerciseIndex + 1;
+        const upcoming = s.exercises.slice(start, start + UPCOMING_LIMIT);
+        const remaining = Math.max(0, s.exercises.length - start);
+
+        const signature = [s.currentExerciseIndex, s.exercises.length, state.lang,
+            upcoming.map((ex) => [ex.name, ex.muscle, ex.sets, ex.reps].join('|')).join('§'),
+            remaining].join('~');
+        if (signature === upcomingSignature) return;
+        upcomingSignature = signature;
+
+        // O badge NÃO é aria-hidden: é a fonte da posição absoluta e precisa
+        // chegar ao leitor de tela. `role="list"` no <ol> preserva a semântica
+        // de lista apesar do `list-style: none` (Safari/VoiceOver).
+        list.innerHTML = upcoming.map((ex, i) => {
+            const position = start + i + 1;
+            const meta = upcomingExerciseMeta(ex);
+            return `<li class="player-upcoming-item">
+                <span class="player-upcoming-index">${position}</span>
+                <span class="player-upcoming-body">
+                    <span class="player-upcoming-name">${catalogText(upcomingExerciseName(ex, position))}</span>
+                    ${meta ? `<span class="player-upcoming-meta">${catalogText(meta)}</span>` : ''}
+                </span>
+            </li>`;
+        }).join('');
+
+        const remainingEl = document.getElementById('player-upcoming-remaining');
+        if (remainingEl) {
+            remainingEl.hidden = remaining <= 0;
+            remainingEl.innerText = remaining === 1
+                ? I18n.t('upcoming_remaining_one')
+                : interpolateToken(I18n.t('upcoming_remaining'), '{count}', remaining);
+        }
+
+        const emptyEl = document.getElementById('player-upcoming-empty');
+        if (emptyEl) emptyEl.hidden = upcoming.length > 0;
+    }
+
     function updatePlayerUI() {
         if (!state.session) return;
         const s = state.session;
@@ -2326,6 +2476,9 @@
 
         document.getElementById('btn-prev-ex').style.opacity = s.currentExerciseIndex === 0 ? '0.5' : '1';
         document.getElementById('btn-next-ex').style.opacity = s.currentExerciseIndex === s.exercises.length - 1 ? '0.5' : '1';
+
+        // Sprint 5.5: próximos exercícios derivados da própria sessão.
+        renderUpcomingExercises(s);
 
         // Sprint 4 / E5: o rótulo do botão de pausa e o CTA principal espelham
         // o ESTADO REAL da sessão (`status` é a fonte única — nada é copiado
@@ -3331,6 +3484,13 @@
         // Sprint 5.1: a Home semanal é texto derivado do histórico (nomes de dias,
         // com ou sem treino, contadores) -> redesenha quando o idioma muda.
         I18n.onChange(() => renderHome());
+        // Sprint 5.5: a lista de próximos exercícios tem texto derivado
+        // (fallback do nome e contagem restante) -> redesenha na troca de idioma.
+        I18n.onChange(() => {
+            if (!state.session) return;
+            upcomingSignature = '';
+            renderUpcomingExercises(state.session);
+        });
 
         // Sprint 4: se havia uma sessão de treino em andamento, oferece
         // retomar ou descartar (o estado já veio sanitizado pelo domínio).

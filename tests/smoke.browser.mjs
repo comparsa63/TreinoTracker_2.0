@@ -4527,6 +4527,328 @@ async function main() {
     navigate('home');
   })()`, "restaurar Home após o bloco do descanso prescrito");
 
+  // --- Sprint 5.5: próximos exercícios no Player --------------------------
+  // Sessão sintética de 6 exercícios para controlar nomes/grupos/séries.
+  const UP_NAMES = ['Supino Reto', 'Remada Curvada', 'Agachamento', 'Rosca Direta', 'Desenvolvimento', 'Abdominal'];
+  const upcomingStart = await ev(`(function(){
+    if (state.session) state.session = null;
+    WorkoutController.clear();
+    I18n.setLocale('pt'); // F3: bloco independente do idioma herdado
+    var names = ${JSON.stringify(UP_NAMES)};
+    var routine = { id:'rUpcoming', letter:'U', name:'Upcoming', exercises: [
+      { catalogId:'U1', sets:4, reps:12, weight:60, rest:60 },
+      { catalogId:'U2', sets:3, reps:10, weight:40, rest:60 },
+      { catalogId:'U3', sets:5, reps:8, weight:80, rest:90 },
+      { catalogId:'U4', sets:2, reps:15, weight:20, rest:45 },
+      { catalogId:'U5', sets:4, reps:6, weight:30, rest:60 },
+      { catalogId:'U6', sets:3, reps:20, weight:0, rest:45 }
+    ]};
+    state.session = WorkoutSession.create(routine, new Date(), { resolve: function(id){
+      return { name: names[+id.slice(1) - 1], muscle: 'Peito', img: '' };
+    }});
+    state.session.exercises[1].muscle = 'Costas';
+    state.session.exercises[2].muscle = 'Pernas';
+    // Sentinela: renderizar a lista NÃO pode gravar na sessão persistida.
+    localStorage.setItem('tt_ds_v1_session', JSON.stringify({ sentinel: 'nao-tocar' }));
+    navigate('player');
+    updatePlayerUI();
+    var sect = document.getElementById('player-upcoming');
+    var nav = document.querySelector('.player-nav-btns');
+    var items = Array.prototype.slice.call(document.querySelectorAll('#player-upcoming-list > li'));
+    function txt(sel, li){ var el = li.querySelector(sel); return el ? el.textContent.trim() : ''; }
+    return {
+      count: items.length,
+      indices: items.map(function(li){ return txt('.player-upcoming-index', li); }),
+      names: items.map(function(li){ return txt('.player-upcoming-name', li); }),
+      metas: items.map(function(li){ return txt('.player-upcoming-meta', li); }),
+      remaining: document.getElementById('player-upcoming-remaining').innerText,
+      remainingHidden: document.getElementById('player-upcoming-remaining').hidden,
+      emptyHidden: document.getElementById('player-upcoming-empty').hidden,
+      title: document.getElementById('player-upcoming-title').textContent.trim(),
+      belowNav: nav.getBoundingClientRect().bottom <= sect.getBoundingClientRect().top + 1,
+      clickable: sect.querySelectorAll('button, a, [tabindex], [role="button"]').length,
+      listRole: document.getElementById('player-upcoming-list').getAttribute('role'),
+      indexAriaHidden: items.map(function(li){
+        var el = li.querySelector('.player-upcoming-index');
+        return el ? el.getAttribute('aria-hidden') : 'missing';
+      }),
+      text: sect.innerText,
+      stored: localStorage.getItem('tt_ds_v1_session')
+    };
+  })()`, "próximos exercícios: primeiro exercício");
+
+  check("5.5: no início mostra 3 seguintes, sem repetir o exercício atual",
+    upcomingStart.count === 3 &&
+      JSON.stringify(upcomingStart.names) === JSON.stringify(['Remada Curvada', 'Agachamento', 'Rosca Direta']) &&
+      upcomingStart.names.indexOf('Supino Reto') === -1,
+    JSON.stringify(upcomingStart.names));
+  check("5.5: numeração da lista é a posição ABSOLUTA (2, 3, 4)",
+    JSON.stringify(upcomingStart.indices) === JSON.stringify(['2', '3', '4']),
+    JSON.stringify(upcomingStart.indices));
+  check("5.5: numeração chega ao leitor de tela e a lista preserva semântica",
+    upcomingStart.listRole === 'list' &&
+      upcomingStart.indexAriaHidden.length === 3 &&
+      upcomingStart.indexAriaHidden.every(function(v){ return v === null; }),
+    JSON.stringify({ role: upcomingStart.listRole, ariaHidden: upcomingStart.indexAriaHidden }));
+  check("5.5: cada item traz grupo muscular e séries × repetições",
+    JSON.stringify(upcomingStart.metas) === JSON.stringify(['Costas · 3 × 10', 'Pernas · 5 × 8', 'Peito · 2 × 15']),
+    JSON.stringify(upcomingStart.metas));
+  check("5.5: informa discretamente quantos exercícios restam (5)",
+    upcomingStart.remaining === 'Restam 5 exercícios' && upcomingStart.remainingHidden === false &&
+      upcomingStart.emptyHidden === true && upcomingStart.title === 'Próximos exercícios',
+    JSON.stringify({ remaining: upcomingStart.remaining, empty: upcomingStart.emptyHidden }));
+  check("5.5: lista fica abaixo de Anterior/Próximo e é somente leitura",
+    upcomingStart.belowNav === true && upcomingStart.clickable === 0,
+    JSON.stringify({ belowNav: upcomingStart.belowNav, clickable: upcomingStart.clickable }));
+  check("5.5: não exibe carga nem descanso prescrito",
+    upcomingStart.text.indexOf('kg') === -1 && upcomingStart.text.indexOf('01:00') === -1 &&
+      upcomingStart.text.indexOf('60s') === -1,
+    upcomingStart.text.replace(/\n/g, ' | '));
+  check("5.5: renderizar a lista não grava na sessão persistida",
+    upcomingStart.stored === JSON.stringify({ sentinel: 'nao-tocar' }), upcomingStart.stored);
+
+  const upcomingMiddle = await ev(`(function(){
+    nextExercise(); nextExercise(); nextExercise();
+    var items = Array.prototype.slice.call(document.querySelectorAll('#player-upcoming-list > li'));
+    var stored = JSON.parse(localStorage.getItem('tt_ds_v1_session') || 'null');
+    return {
+      index: state.session.currentExerciseIndex,
+      count: items.length,
+      indices: items.map(function(li){ return li.querySelector('.player-upcoming-index').textContent.trim(); }),
+      names: items.map(function(li){ return li.querySelector('.player-upcoming-name').textContent.trim(); }),
+      remaining: document.getElementById('player-upcoming-remaining').innerText,
+      emptyHidden: document.getElementById('player-upcoming-empty').hidden,
+      storedIndex: stored ? stored.currentExerciseIndex : null
+    };
+  })()`, "próximos exercícios: meio");
+
+  check("5.5: no meio (exercício 4) a lista recomeça no 5 e encurta",
+    upcomingMiddle.index === 3 && upcomingMiddle.count === 2 &&
+      JSON.stringify(upcomingMiddle.indices) === JSON.stringify(['5', '6']) &&
+      JSON.stringify(upcomingMiddle.names) === JSON.stringify(['Desenvolvimento', 'Abdominal']) &&
+      upcomingMiddle.remaining === 'Restam 2 exercícios' && upcomingMiddle.emptyHidden === true,
+    JSON.stringify(upcomingMiddle));
+  check("5.5: navegar mantém a persistência da sessão (índice salvo)",
+    upcomingMiddle.storedIndex === 3, JSON.stringify(upcomingMiddle));
+
+  const upcomingLast = await ev(`(function(){
+    nextExercise(); nextExercise();
+    var items = document.querySelectorAll('#player-upcoming-list > li');
+    return {
+      index: state.session.currentExerciseIndex,
+      count: items.length,
+      remainingHidden: document.getElementById('player-upcoming-remaining').hidden,
+      emptyHidden: document.getElementById('player-upcoming-empty').hidden,
+      emptyText: document.getElementById('player-upcoming-empty').innerText
+    };
+  })()`, "próximos exercícios: último");
+
+  check("5.5: no último exercício a lista some e mostra a mensagem de fim",
+    upcomingLast.index === 5 && upcomingLast.count === 0 &&
+      upcomingLast.remainingHidden === true && upcomingLast.emptyHidden === false &&
+      upcomingLast.emptyText === 'Fim da lista de exercícios.',
+    JSON.stringify(upcomingLast));
+
+  const upcomingPrev = await ev(`(function(){
+    prevExercise();
+    var items = Array.prototype.slice.call(document.querySelectorAll('#player-upcoming-list > li'));
+    var out = {
+      index: state.session.currentExerciseIndex,
+      count: items.length,
+      names: items.map(function(li){ return li.querySelector('.player-upcoming-name').textContent.trim(); }),
+      remaining: document.getElementById('player-upcoming-remaining').innerText,
+      emptyHidden: document.getElementById('player-upcoming-empty').hidden
+    };
+    prevExercise();
+    return out;
+  })()`, "próximos exercícios: anterior");
+
+  check("5.5: voltar com 'Anterior' recompõe a lista (singular no último)",
+    upcomingPrev.index === 4 && upcomingPrev.count === 1 &&
+      JSON.stringify(upcomingPrev.names) === JSON.stringify(['Abdominal']) &&
+      upcomingPrev.remaining === 'Resta 1 exercício' && upcomingPrev.emptyHidden === true,
+    JSON.stringify(upcomingPrev));
+
+  // Lista curta + campos ausentes + fallback + escape de nome personalizado.
+  const upcomingShort = await ev(`(function(){
+    if (state.session) state.session = null;
+    var routine = { id:'rShort', letter:'S', name:'Curta', exercises: [
+      { catalogId:'S1', sets:3, reps:10 },
+      { catalogId:'S2', sets:3, reps:10 },
+      { catalogId:'S3', sets:3, reps:10 }
+    ]};
+    var names = ['Primeiro', '', '<img src=x onerror="window.__xss=1">'];
+    state.session = WorkoutSession.create(routine, new Date(), { resolve: function(id){
+      return { name: names[+id.slice(1) - 1], muscle: 'Peito', img: '' };
+    }});
+    state.session.exercises[1].name = '';
+    state.session.exercises[1].muscle = '';
+    state.session.exercises[1].sets = null;
+    state.session.exercises[1].reps = null;
+    state.session.exercises[2].name = '<img src=x onerror="window.__xss=1">';
+    navigate('player');
+    updatePlayerUI();
+    var items = Array.prototype.slice.call(document.querySelectorAll('#player-upcoming-list > li'));
+    return {
+      count: items.length,
+      names: items.map(function(li){ return li.querySelector('.player-upcoming-name').textContent.trim(); }),
+      metas: items.map(function(li){ return li.querySelector('.player-upcoming-meta') ? li.querySelector('.player-upcoming-meta').textContent.trim() : null; }),
+      injected: document.querySelectorAll('#player-upcoming img').length,
+      xss: typeof window.__xss,
+      remaining: document.getElementById('player-upcoming-remaining').innerText,
+      emptyHidden: document.getElementById('player-upcoming-empty').hidden
+    };
+  })()`, "próximos exercícios: campos ausentes e escape");
+
+  check("5.5: nome ausente usa 'Exercício N'; campos ausentes somem do meta",
+    upcomingShort.count === 2 && upcomingShort.names[0] === 'Exercício 2' &&
+      upcomingShort.metas[0] === null && upcomingShort.remaining === 'Restam 2 exercícios' &&
+      upcomingShort.emptyHidden === true,
+    JSON.stringify(upcomingShort));
+  check("5.5: nome personalizado malicioso é texto, nunca HTML executado",
+    upcomingShort.names[1] === '<img src=x onerror="window.__xss=1">' &&
+      upcomingShort.injected === 0 && upcomingShort.xss === 'undefined',
+    JSON.stringify({ nome: upcomingShort.names[1], imgs: upcomingShort.injected, xss: upcomingShort.xss }));
+
+  // Pausa: a lista continua visível e intacta.
+  const upcomingPaused = await ev(`(function(){
+    var before = document.querySelectorAll('#player-upcoming-list > li').length;
+    pauseWorkout();
+    var sect = document.getElementById('player-upcoming');
+    var out = {
+      paused: state.session.status,
+      before: before,
+      after: document.querySelectorAll('#player-upcoming-list > li').length,
+      visible: sect.getBoundingClientRect().height > 0 && sect.offsetParent !== null,
+      cta: document.getElementById('btn-complete-set').innerText.trim()
+    };
+    resumeWorkout();
+    out.resumed = state.session.status;
+    return out;
+  })()`, "próximos exercícios: pausa");
+
+  check("5.5: durante a pausa a lista continua visível e sem alterações",
+    upcomingPaused.paused === 'paused' && upcomingPaused.visible === true &&
+      upcomingPaused.before === 2 && upcomingPaused.after === 2 &&
+      /Treino pausado/i.test(upcomingPaused.cta) && upcomingPaused.resumed === 'active',
+    JSON.stringify(upcomingPaused));
+
+  // PT/EN/ES: título, fallback e contagem acompanham o idioma.
+  const upcomingEn = await ev(`(function(){
+    I18n.setLocale('en');
+    var items = document.querySelectorAll('#player-upcoming-list > li');
+    return {
+      title: document.getElementById('player-upcoming-title').textContent.trim(),
+      fallback: items[0] ? items[0].querySelector('.player-upcoming-name').textContent.trim() : null,
+      remaining: document.getElementById('player-upcoming-remaining').innerText
+    };
+  })()`, "próximos exercícios: inglês");
+  const upcomingEs = await ev(`(function(){
+    I18n.setLocale('es');
+    var items = document.querySelectorAll('#player-upcoming-list > li');
+    return {
+      title: document.getElementById('player-upcoming-title').textContent.trim(),
+      fallback: items[0] ? items[0].querySelector('.player-upcoming-name').textContent.trim() : null,
+      remaining: document.getElementById('player-upcoming-remaining').innerText
+    };
+  })()`, "próximos exercícios: espanhol");
+  const upcomingPt = await ev(`(function(){
+    I18n.setLocale('pt');
+    var items = document.querySelectorAll('#player-upcoming-list > li');
+    return {
+      title: document.getElementById('player-upcoming-title').textContent.trim(),
+      fallback: items[0] ? items[0].querySelector('.player-upcoming-name').textContent.trim() : null,
+      remaining: document.getElementById('player-upcoming-remaining').innerText
+    };
+  })()`, "próximos exercícios: português");
+
+  check("5.5: PT/EN/ES traduzem título, fallback e contagem",
+    upcomingEn.title === 'Upcoming exercises' && upcomingEn.fallback === 'Exercise 2' &&
+      upcomingEn.remaining === '2 exercises left' &&
+      upcomingEs.title === 'Próximos ejercicios' && upcomingEs.fallback === 'Ejercicio 2' &&
+      upcomingEs.remaining === 'Quedan 2 ejercicios' &&
+      upcomingPt.title === 'Próximos exercícios' && upcomingPt.fallback === 'Exercício 2' &&
+      upcomingPt.remaining === 'Restam 2 exercícios',
+    JSON.stringify({ en: upcomingEn, es: upcomingEs, pt: upcomingPt }));
+
+  // Regressão: timer/descanso continuam funcionando com a lista na tela.
+  const upcomingRest = await ev(`(function(){
+    document.getElementById('toggle-auto-rest').checked = false;
+    state.autoRestEnabled = false;
+    startRestTimer(60);
+    var overlay = document.getElementById('rest-overlay').classList.contains('active');
+    var visible = document.getElementById('player-upcoming').getBoundingClientRect().height > 0;
+    var items = document.querySelectorAll('#player-upcoming-list > li').length;
+    var status = state.session.status;
+    skipRest();
+    return {
+      overlay: overlay,
+      visible: visible,
+      items: items,
+      status: status,
+      after: document.getElementById('rest-overlay').classList.contains('active'),
+      itemsAfter: document.querySelectorAll('#player-upcoming-list > li').length
+    };
+  })()`, "próximos exercícios: descanso");
+  check("5.5: descanso abre/fecha sem afetar a lista de próximos",
+    upcomingRest.overlay === true && upcomingRest.visible === true && upcomingRest.items === 2 &&
+      upcomingRest.status === 'active' && upcomingRest.after === false && upcomingRest.itemsAfter === 2,
+    JSON.stringify(upcomingRest));
+
+  // 320 px: sem rolagem horizontal e sem cobrir o CTA fixo.
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    width: 320, height: 568, deviceScaleFactor: 2, mobile: true, screenWidth: 320, screenHeight: 568,
+  });
+  await sleep(200);
+  const upcoming320 = await ev(`(function(){
+    window.scrollTo(0, 0);
+    var sect = document.getElementById('player-upcoming');
+    var items = Array.prototype.slice.call(document.querySelectorAll('#player-upcoming-list > li'));
+    function rect(el){ var b = el.getBoundingClientRect(); return { l:b.left, r:b.right, w:b.width, h:b.height, t:b.top, b:b.bottom }; }
+    var out = {
+      doc: document.documentElement.scrollWidth,
+      vw: window.innerWidth,
+      sect: sect ? rect(sect) : null,
+      items: items.map(rect),
+      titleOverflow: (function(){
+        var t = document.getElementById('player-upcoming-title');
+        return t.scrollWidth <= t.clientWidth + 1;
+      })(),
+      ctaPosition: getComputedStyle(document.querySelector('.fixed-action-btn')).position
+    };
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    var cta = rect(document.getElementById('btn-complete-set'));
+    out.cta = cta;
+    out.sectBottom = sect ? rect(sect).b : null;
+    out.covered = sect ? rect(sect).b > cta.t + 1 : null;
+    return out;
+  })()`, "próximos exercícios: 320px");
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    width: 390, height: 844, deviceScaleFactor: 2, mobile: true, screenWidth: 390, screenHeight: 844,
+  });
+  await ev(`(function(){ window.scrollTo(0, 0); return true; })()`);
+
+  check("5.5 320px: lista cabe na largura, sem rolagem horizontal",
+    upcoming320.doc <= 321 && upcoming320.vw === 320 &&
+      upcoming320.sect !== null && upcoming320.sect.l >= -1 && upcoming320.sect.r <= 321 &&
+      upcoming320.items.every(function(it){ return it.l >= -1 && it.r <= 321; }),
+    JSON.stringify({ doc: upcoming320.doc, sect: upcoming320.sect, itens: upcoming320.items }));
+  check("5.5 320px: CTA continua fixo e não cobre a lista no fim da rolagem",
+    upcoming320.ctaPosition === 'fixed' && upcoming320.cta.l >= -1 && upcoming320.cta.r <= 321 &&
+      upcoming320.covered === false,
+    JSON.stringify({ position: upcoming320.ctaPosition, cta: upcoming320.cta, covered: upcoming320.covered }));
+
+  // Limpeza: sem sessão sintética pendente para os checks finais.
+  await ev(`(function(){
+    state.session = null;
+    WorkoutController.clear();
+    state.editingRoutineId = null;
+    I18n.setLocale('pt');
+    window.scrollTo(0, 0);
+    navigate('home');
+    return true;
+  })()`, "limpeza da sprint 5.5");
+
   // --- Erros de JS ----------------------------------------------------------
   const realErrors = jsErrors.filter((e) => !/unsplash|net::ERR|Failed to load resource|ERR_BLOCKED/i.test(e));
   check("nenhum erro de JS no console", realErrors.length === 0, realErrors.slice(0, 3).join(" | "));

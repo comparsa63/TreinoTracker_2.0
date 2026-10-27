@@ -101,6 +101,12 @@
       custom_error_in_use: "O exercício \"{name}\" está em uso. Remova-o das rotinas ou finalize o treino antes de excluir.",
       custom_error_not_found: "Exercício personalizado não encontrado.",
       confirm: "Confirmar",
+      // Sprint 5.5: próximos exercícios no Player.
+      upcoming_exercises: "Próximos exercícios",
+      upcoming_empty: "Fim da lista de exercícios.",
+      upcoming_remaining: "Restam {count} exercícios",
+      upcoming_remaining_one: "Resta 1 exercício",
+      upcoming_fallback: "Exercício {n}",
     },
     en: {
       greeting: "Hello, Athlete", greeting_sub: "Ready for today's workout?",
@@ -177,6 +183,12 @@
       custom_error_in_use: "The exercise \"{name}\" is in use. Remove it from routines or finish the workout before deleting.",
       custom_error_not_found: "Custom exercise not found.",
       confirm: "Confirm",
+      // Sprint 5.5: upcoming exercises in the Player.
+      upcoming_exercises: "Upcoming exercises",
+      upcoming_empty: "End of the exercise list.",
+      upcoming_remaining: "{count} exercises left",
+      upcoming_remaining_one: "1 exercise left",
+      upcoming_fallback: "Exercise {n}",
     },
     es: {
       greeting: "Hola, Atleta", greeting_sub: "¿Listo para el entrenamiento de hoy?",
@@ -253,6 +265,12 @@
       custom_error_in_use: "El ejercicio \"{name}\" está en uso. Elimínalo de las rutinas o finaliza el entreno antes de borrarlo.",
       custom_error_not_found: "Ejercicio personalizado no encontrado.",
       confirm: "Confirmar",
+      // Sprint 5.5: próximos ejercicios en el Player.
+      upcoming_exercises: "Próximos ejercicios",
+      upcoming_empty: "Fin de la lista de ejercicios.",
+      upcoming_remaining: "Quedan {count} ejercicios",
+      upcoming_remaining_one: "Queda 1 ejercicio",
+      upcoming_fallback: "Ejercicio {n}",
     },
   };
 
